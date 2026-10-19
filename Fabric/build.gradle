@@ -28,6 +28,7 @@ loom {
 }
 
 dependencies {
+	testImplementation "junit:junit:4.13.2"
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	
@@ -88,3 +89,6 @@ publishing {
 	}
 }
 
+
+// Run category regressions as part of every Gradle build.
+test { useJUnit() }

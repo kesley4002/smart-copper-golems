@@ -1,8 +1,9 @@
 package com.anantaya.smartcgolem.util;
 
 import java.util.Objects;
+import org.junit.Test;
 
-/** Dependency-free policy regression tests; Minecraft adapter requires the full build. */
+/** Category policy regression tests executed by Gradle/JUnit. */
 public final class CategoryPolicyTest {
     private static int checked;
     private static void check(String expected, String id, boolean wood, boolean wool, boolean food) {
@@ -10,7 +11,8 @@ public final class CategoryPolicyTest {
         if (!Objects.equals(expected, actual)) throw new AssertionError(id + ": expected " + expected + ", got " + actual);
         checked++;
     }
-    public static void main(String[] args) {
+    @Test
+    public void categoryFamiliesAndBoundaries() {
         check("wood", "minecraft:oak_log", true, false, false);
         check("wood", "minecraft:crimson_planks", true, false, false);
         check("wood", "example:custom_log", true, false, false);
