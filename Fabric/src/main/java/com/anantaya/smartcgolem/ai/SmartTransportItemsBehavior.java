@@ -164,6 +164,20 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         }
     }
 
+    /** Keep the original availability check used by both WAIT states. */
+    private boolean isChestLocked(ResourceKey<Level> dimension, BlockPos pos, long gameTime) {
+        ChestLockKey key = new ChestLockKey(dimension, pos);
+        synchronized (LOCKED_CHESTS) {
+            ChestLockLease existing = LOCKED_CHESTS.get(key);
+            if (existing == null) return true;
+            if (gameTime - existing.lastTouchedTick() > LOCK_STALE_TICKS) {
+                LOCKED_CHESTS.remove(key);
+                return true;
+            }
+            return false;
+        }
+    }
+
     private void unlockChest() {
         if (lockedChest == null) return;
         synchronized (LOCKED_CHESTS) {
@@ -254,7 +268,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     return;
                 }
 
-                if (isChestLocked(currentTarget, gameTime) && !isChestBusy(chest)) {
+                if (isChestLocked(level.dimension(), currentTarget, gameTime) && !isChestBusy(chest)) {
                     switchState(mob, TaskState.INTERACT_SOURCE, currentTarget, gameTime);
                 }
             }
@@ -288,7 +302,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     return;
                 }
 
-                if (isChestLocked(currentTarget, gameTime) && !isChestBusy(chest)) {
+                if (isChestLocked(level.dimension(), currentTarget, gameTime) && !isChestBusy(chest)) {
                     switchState(mob, TaskState.INTERACT_DESTINATION, currentTarget, gameTime);
                 }
             }
