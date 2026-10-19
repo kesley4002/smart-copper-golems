@@ -1,3 +1,4 @@
+/* Modified by Kesley for Smart Copper Golems Extended, 2026-10-19: category filters and deposit revalidation. Original: GameMech007, Apache-2.0. */
 package com.anantaya.smartcgolem.ai;
 
 import com.google.common.collect.ImmutableMap;
@@ -961,6 +962,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             ItemStack held
     ) {
 
+        // Re-read filters at insertion time: frames may change while the golem walks.
+        FrameFilterResult filter = getFrameFilterResult(level, chestPos, held);
+        if (filter.hasFrame() && !filter.matchesHeld()) return held.copy();
         ItemStack remaining = held.copy();
 
         for (int i = 0; i < chest.getContainerSize(); i++) {
@@ -1108,60 +1112,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             BlockPos chestPos,
             ItemStack held
     ) {
-        boolean hasFrame = false;
-
-        AABB box = new AABB(chestPos).inflate(1.0D);
-
-        for (ItemFrame frame : level.getEntitiesOfClass(ItemFrame.class, box)) {
-
-            BlockPos attachedPos
-                    = frame.blockPosition().relative(frame.getDirection().getOpposite());
-
-            if (!attachedPos.equals(chestPos)) {
-
-                boolean matchesDoubleChest = false;
-
-                BlockState state = level.getBlockState(chestPos);
-
-                if (state.getBlock() instanceof ChestBlock) {
-
-                    for (BlockPos nearby : new BlockPos[] {
-                            chestPos.north(),
-                            chestPos.south(),
-                            chestPos.east(),
-                            chestPos.west()
-                    }) {
-
-                        BlockState nearbyState = level.getBlockState(nearby);
-
-                        if (nearbyState.getBlock() == state.getBlock()
-                                && attachedPos.equals(nearby)) {
-
-                            matchesDoubleChest = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!matchesDoubleChest) {
-                    continue;
-                }
-            }
-
-            ItemStack frameItem = frame.getItem();
-
-            if (frameItem.isEmpty()) {
-                continue;
-            }
-
-            hasFrame = true;
-
-            if (!held.isEmpty() && ItemStack.isSameItemSameComponents(frameItem, held)) {
-                return new FrameFilterResult(true, true, frameItem.copy());
-            }
-        }
-
-        return new FrameFilterResult(hasFrame, false, ItemStack.EMPTY);
+        var result = com.anantaya.smartcgolem.util.ItemFrameHelper.filter(level, chestPos, held);
+        return new FrameFilterResult(result.hasFrame(), result.matchesHeld(), result.matchedFrameItem());
     }
 
     @Override
@@ -1452,3 +1404,4 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         );
     }
 }
+

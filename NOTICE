@@ -1,0 +1,8 @@
+Smart Copper Golems Extended — prototype
+Based on Smart Copper Golems by GameMech007.
+Original: https://github.com/GameMech007-git/smart-copper-golems
+Fork: https://github.com/kesley4002/smart-copper-golems
+Licensed under Apache License 2.0; see LICENSE.
+Modifications by Kesley, 2026-10-19: category filtering, exact frame attachment,
+deposit-time filter revalidation, dedicated-server metadata, build validation.
+The upstream authors do not endorse this fork.

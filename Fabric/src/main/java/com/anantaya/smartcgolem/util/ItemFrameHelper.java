@@ -1,92 +1,94 @@
+/*
+ * Modified for Smart Copper Golems Extended by Kesley, 2026-10-19.
+ * Original project: GameMech007, Apache-2.0.
+ */
 package com.anantaya.smartcgolem.util;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
-public class ItemFrameHelper {
+public final class ItemFrameHelper {
+    private ItemFrameHelper() {}
 
-    public static List<ItemStack> getFramedItems(
-            ServerLevel level,
-            BlockPos chestPos
-    ) {
-
-        List<ItemStack> framedItems =
-                new ArrayList<>();
-
-        for (Direction direction : Direction.values()) {
-
-            BlockPos framePos =
-                    chestPos.relative(direction);
-
-            AABB searchBox =
-                    new AABB(framePos).inflate(0.5);
-
-            List<ItemFrame> frames =
-                    level.getEntitiesOfClass(
-                            ItemFrame.class,
-                            searchBox
-                    );
-
-            for (ItemFrame frame : frames) {
-
-                Direction attachedFace =
-                        frame.getDirection();
-
-                if (attachedFace != direction) {
-                    continue;
-                }
-
-                ItemStack displayed =
-                        frame.getItem();
-
-                if (!displayed.isEmpty()) {
-                    framedItems.add(displayed.copy());
-                }
-            }
-        }
-
-        return framedItems;
+    /** Only the real partner of a double chest shares its filter. */
+    private static BlockPos partner(ServerLevel level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (!(state.getBlock() instanceof ChestBlock)
+                || state.getValue(ChestBlock.TYPE) == ChestType.SINGLE) return null;
+        BlockPos other = pos.relative(ChestBlock.getConnectedDirection(state));
+        BlockState adjacent = level.getBlockState(other);
+        if (adjacent.getBlock() != state.getBlock()
+                || adjacent.getValue(ChestBlock.TYPE) == ChestType.SINGLE
+                || adjacent.getValue(ChestBlock.TYPE) == state.getValue(ChestBlock.TYPE)
+                || adjacent.getValue(ChestBlock.FACING) != state.getValue(ChestBlock.FACING)
+                || !other.relative(ChestBlock.getConnectedDirection(adjacent)).equals(pos)) return null;
+        return other;
     }
 
-    public static boolean hasMatchingFrame(
-            ServerLevel level,
-            BlockPos chestPos,
-            ItemStack stack
-    ) {
-
-        if (stack.isEmpty()) {
-            return false;
-        }
-
-        List<ItemStack> framedItems =
-                getFramedItems(level, chestPos);
-
-        // No item frames means chest accepts any item.
-        if (framedItems.isEmpty()) {
-            return true;
-        }
-
-        for (ItemStack framedItem : framedItems) {
-
-            if (framedItem.isEmpty()) {
-                continue;
-            }
-
-            if (ItemStack.isSameItemSameComponents(
-                    framedItem,
-                    stack
-            )) {
-                return true;
+    private static List<ItemFrame> frames(ServerLevel level, BlockPos pos) {
+        BlockPos other = partner(level, pos);
+        AABB box = new AABB(pos).inflate(2.0D);
+        List<ItemFrame> result = new ArrayList<>();
+        for (ItemFrame frame : level.getEntitiesOfClass(ItemFrame.class, box)) {
+            BlockPos attached = frame.blockPosition().relative(frame.getDirection().getOpposite());
+            if ((attached.equals(pos) || attached.equals(other)) && !frame.getItem().isEmpty()) {
+                result.add(frame);
             }
         }
+        return result;
+    }
 
-        return false;
+    public record FilterResult(boolean hasFrame, boolean matchesHeld, ItemStack matchedFrameItem) {}
+
+    public static FilterResult filter(ServerLevel level, BlockPos pos, ItemStack held) {
+        List<ItemFrame> frames = frames(level, pos);
+        String selectedCategory = null;
+        ItemStack representative = ItemStack.EMPTY;
+        boolean hasCategory = false;
+        boolean exactMatch = false;
+        ItemStack exactItem = ItemStack.EMPTY;
+        for (ItemFrame frame : frames) {
+            ItemStack sample = frame.getItem();
+            // Explicit opt-in: any item frame rotated once (45 degrees).
+            if (frame.getRotation() == 1) {
+                String category = SmartCategories.category(sample);
+                // Unknown representative or competing categories: reject, never fallback.
+                if (category == null || (hasCategory && !Objects.equals(selectedCategory, category))) {
+                    return new FilterResult(true, false, ItemStack.EMPTY);
+                }
+                hasCategory = true;
+                selectedCategory = category;
+                representative = sample;
+            } else if (!held.isEmpty() && ItemStack.isSameItemSameComponents(sample, held)) {
+                exactMatch = true;
+                exactItem = sample;
+            }
+        }
+        // One category owns the entire logical container, including both chest halves.
+        if (hasCategory) {
+            boolean matches = !held.isEmpty() && selectedCategory.equals(SmartCategories.category(held));
+            return new FilterResult(true, matches, representative.copy());
+        }
+        return new FilterResult(!frames.isEmpty(), exactMatch, exactItem.copy());
+    }
+
+    public static List<ItemStack> getFramedItems(ServerLevel level, BlockPos pos) {
+        return frames(level, pos).stream().map(frame -> frame.getItem().copy()).toList();
+    }
+
+    public static boolean hasMatchingFrame(ServerLevel level, BlockPos pos, ItemStack stack) {
+        if (stack.isEmpty()) return false;
+        FilterResult filter = filter(level, pos, stack);
+        return !filter.hasFrame() || filter.matchesHeld();
     }
 }

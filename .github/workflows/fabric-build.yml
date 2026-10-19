@@ -1,0 +1,35 @@
+name: Fabric prototype validation
+on:
+  push:
+    branches: ['feature/smart-categories-26.2']
+  pull_request:
+    branches: ['v-26.2']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: Fabric
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/wrapper-validation@v4
+      - name: Test category policy
+        run: |
+          mkdir -p build/policy-tests
+          javac -d build/policy-tests src/main/java/com/anantaya/smartcgolem/util/CategoryPolicy.java src/test/java/com/anantaya/smartcgolem/util/CategoryPolicyTest.java
+          java -cp build/policy-tests com.anantaya.smartcgolem.util.CategoryPolicyTest
+      - name: Compile and validate Fabric
+        run: bash gradlew --no-daemon build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smart-copper-golems-extended-fabric-prototype
+          path: Fabric/build/libs/*.jar
+          if-no-files-found: error

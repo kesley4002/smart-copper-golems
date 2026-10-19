@@ -1,3 +1,4 @@
+// Modified by Kesley, 2026-10-19: package upstream license and Extended notices.
 plugins {
 	id 'net.fabricmc.fabric-loom' version "${loom_version}"
 	id 'maven-publish'
@@ -61,10 +62,11 @@ java {
 }
 
 jar {
+	from("../NOTICE")
 	def projectName = project.name
 	inputs.property "projectName", projectName
 
-	from("LICENSE") {
+	from("../LICENSE") {
 		rename { "${it}_$projectName"}
 	}
 }
@@ -85,3 +87,4 @@ publishing {
 		// retrieving dependencies.
 	}
 }
+
