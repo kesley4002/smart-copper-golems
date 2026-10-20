@@ -9,18 +9,16 @@ import net.minecraft.client.Minecraft;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Client-owned visual states. The server always controls the golem movement. */
 public final class ClientStretchAnimations implements ClientModInitializer {
-    public record Pose(int stage, int age, long receivedAt) {}
+    public record Pose(int stage, int age, int maxProgress, long receivedAt) {}
     private static final Map<Integer, Pose> STATES = new HashMap<>();
     @Override public void onInitializeClient() {
         ClientPlayNetworking.registerGlobalReceiver(StretchPayload.TYPE, (packet, ctx) -> {
             Minecraft client = ctx.client();
             client.execute(() -> {
                 if (packet.stage() == StretchManager.IDLE) STATES.remove(packet.entityId());
-                else STATES.put(packet.entityId(),
-                        new Pose(packet.stage(), packet.stageTicks(),
-                                client.level == null ? 0 : client.level.getGameTime()));
+                else STATES.put(packet.entityId(), new Pose(packet.stage(), packet.stageTicks(),
+                        packet.maxProgress(), client.level == null ? 0 : client.level.getGameTime()));
             });
         });
     }
@@ -30,11 +28,12 @@ public final class ClientStretchAnimations implements ClientModInitializer {
         if (p == null || client.level == null) return 0;
         float elapsed = p.age() + (client.level.getGameTime() - p.receivedAt()) + partialTick;
         float normalized = Math.max(0f, Math.min(1f, elapsed / StretchManager.DURATION));
-        return switch (p.stage()) {
+        float phase = switch (p.stage()) {
             case StretchManager.GROW -> normalized;
             case StretchManager.HOLD -> 1f;
             case StretchManager.SHRINK -> 1f - normalized;
             default -> 0f;
         };
+        return phase * (p.maxProgress() / 1000f);
     }
 }

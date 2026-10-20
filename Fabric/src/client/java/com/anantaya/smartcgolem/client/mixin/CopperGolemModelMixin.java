@@ -12,9 +12,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(CopperGolemModel.class)
 public abstract class CopperGolemModelMixin {
-    // CopperGolemModel 26.2 does not declare leftLeg/rightLeg fields.
-    // Resolve the actual baked child bones through the public Model.root().
-    // This avoids @Shadow mismatches that abort Minecraft resource reload.
     @Inject(method = "setupAnim", at = @At("TAIL"))
     private void scg$applyStretch(CopperGolemRenderState state, CallbackInfo ci) {
         float p = ((StretchRenderAccess) state).scg$getStretch();
@@ -25,13 +22,21 @@ public abstract class CopperGolemModelMixin {
         ModelPart leftLeg = root.getChild("left_leg");
         ModelPart rightLeg = root.getChild("right_leg");
 
-        // Java's model coordinates grow downward; Bedrock's grow upward.
         body.y -= pose.bodyY();
         body.yScale *= pose.bodyScale();
         leftLeg.y -= pose.legY();
         rightLeg.y -= pose.legY();
         leftLeg.yScale *= pose.legScale();
         rightLeg.yScale *= pose.legScale();
-        // Preserve all vanilla arm/head animations.
+
+        // The vanilla locomotion animation must not swing the telescoping legs.
+        // The golem is stationary throughout growth, hold and shrink.
+        leftLeg.xRot = 0f;
+        leftLeg.yRot = 0f;
+        leftLeg.zRot = 0f;
+        rightLeg.xRot = 0f;
+        rightLeg.yRot = 0f;
+        rightLeg.zRot = 0f;
+        // Keep vanilla upper body and held item rendering untouched.
     }
 }
