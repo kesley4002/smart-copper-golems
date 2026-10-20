@@ -2,7 +2,7 @@ package com.anantaya.smartcgolem.geyser;
 
 import org.geysermc.event.subscribe.Subscribe;
 import org.geysermc.geyser.api.GeyserApi;
-import org.geysermc.geyser.api.entity.property.GeyserFloatEntityProperty;
+import org.geysermc.geyser.api.entity.property.type.GeyserFloatEntityProperty;
 import org.geysermc.geyser.api.event.lifecycle.GeyserDefineEntityPropertiesEvent;
 import org.geysermc.geyser.api.event.lifecycle.GeyserPostInitializeEvent;
 import org.geysermc.geyser.api.event.lifecycle.GeyserShutdownEvent;
