@@ -128,7 +128,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             int verticalSearchDistance,
             Consumer<PathfinderMob> onTravelling
     ) {
-        super(ImmutableMap.of(), 200);
+        // A complete remote stretch includes 100 ticks of stuck detection,
+        // 101 ticks growing, chest animation and 101 ticks shrinking.
+        // Prevent vanilla Behavior timeout from interrupting midway.
+        super(ImmutableMap.of(), 1200);
 
         this.speedModifier = speedModifier;
         this.sourceBlockType = sourceBlockType;
