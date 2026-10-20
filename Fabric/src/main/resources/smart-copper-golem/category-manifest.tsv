@@ -17,8 +17,13 @@ colorful_decor	Decoração colorida: camas, velas e estandartes	30,31,32	59
 portable_storage	Armazenamento portátil: shulkers e bolsas	33	34
 aquatic	Corais e itens aquáticos	37	37
 agriculture	Agricultura: sementes e colheitas	41	15
-food	Alimentos	42,43	40
-mob_drops	Drops de mobs e tesouros	44,45,61	48
+food_raw_meat	Carnes e peixes crus	42,43	9
+food_cooked_meat	Carnes e peixes cozidos	42,43	7
+food_raw_vegetables	Vegetais crus	42,43	5
+food_cooked_vegetables	Vegetais preparados	42,43	5
+food_fruit	Frutas	42,43	7
+food_meals	Refeições, doces e especiais	42,43	6
+mob_drops	Drops de mobs e tesouros	44,45,61	49
 redstone	Redstone e circuitos	46	26
 copper_machines	Maquinaria e acessórios de cobre	47	73
 transport	Transportes e montarias	48,49	62
