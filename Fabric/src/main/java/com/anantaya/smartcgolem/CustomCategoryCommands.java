@@ -25,14 +25,14 @@ public final class CustomCategoryCommands {
                         })))
                 .then(Commands.literal("add")
                         .then(Commands.argument("name", StringArgumentType.word())
-                                .then(Commands.argument("item_id", StringArgumentType.word()).executes(ctx -> {
+                                .then(Commands.argument("item_id", StringArgumentType.greedyString()).executes(ctx -> {
                                     String name = StringArgumentType.getString(ctx, "name");
                                     String id = StringArgumentType.getString(ctx, "item_id");
                                     return invoke(ctx.getSource(), () -> ServerCategorySettings.add(name, id), id + " adicionado em " + name);
                                 }))))
                 .then(Commands.literal("remove")
                         .then(Commands.argument("name", StringArgumentType.word())
-                                .then(Commands.argument("item_id", StringArgumentType.word()).executes(ctx -> {
+                                .then(Commands.argument("item_id", StringArgumentType.greedyString()).executes(ctx -> {
                                     String name = StringArgumentType.getString(ctx, "name");
                                     String id = StringArgumentType.getString(ctx, "item_id");
                                     return invoke(ctx.getSource(), () -> ServerCategorySettings.remove(name, id), id + " removido de " + name);
