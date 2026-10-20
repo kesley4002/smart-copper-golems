@@ -35,6 +35,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.core.particles.ParticleTypes;
 import org.jspecify.annotations.NonNull;
 
@@ -92,6 +93,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private BlockPos currentWalkTarget = null;
     private BlockPos cachedHopGoal = null;
     private BlockPos cachedHopTarget = null;
+    private BlockPos cachedDescentGoal = null;
+    private BlockPos cachedDescentWaypoint = null;
+    private long nextDescentProbeTick = 0L;
     private BlockPos lastPickupChest = null;
     private BlockPos returnToSourceChest = null;
     private ChestLockKey lockedChest = null;
@@ -395,12 +399,71 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         // than the configured 500-block work square. Travel in short hops
         // towards distant storage, while retaining the actual target for
         // arrival checks and the existing stuck/magic-deposit logic.
-        BehaviorUtils.setWalkAndLookTargetMemories(
-                mob,
-                shortHop(mob, currentWalkTarget),
-                speedModifier,
-                0
-        );
+        BlockPos navTarget = shortHop(mob, currentWalkTarget);
+        // When a basement storage room lies directly below, a straight
+        // X/Z waypoint can point at solid floor. Try a reachable staircase
+        // or ladder leading down before giving up on natural movement.
+        if (currentTarget != null
+                && currentTarget.getY() < mob.blockPosition().getY() - 2) {
+            if (gameTime >= nextDescentProbeTick
+                    || !currentTarget.equals(cachedDescentGoal)) {
+                cachedDescentGoal = currentTarget.immutable();
+                cachedDescentWaypoint = findNearbyDescent(mob, currentTarget);
+                nextDescentProbeTick = gameTime + 100L;
+            }
+            if (cachedDescentWaypoint != null
+                    && mob.blockPosition().distSqr(cachedDescentWaypoint) > 4) {
+                navTarget = cachedDescentWaypoint;
+            }
+            // Re-evaluate a newly reachable point beside the lower chest
+            // as the golem approaches a staircase entrance.
+            if (gameTime % 60L == 0L && mob.blockPosition().distSqr(currentTarget) < 32 * 32) {
+                BlockPos better = findBestWalkTargetForChest(mob, currentTarget);
+                if (!better.equals(currentTarget)) currentWalkTarget = better;
+            }
+        } else {
+            cachedDescentGoal = null;
+            cachedDescentWaypoint = null;
+        }
+        BehaviorUtils.setWalkAndLookTargetMemories(mob, navTarget, speedModifier, 0);
+    }
+
+    private BlockPos findNearbyDescent(PathfinderMob mob, BlockPos destination) {
+        if (!(mob.level() instanceof ServerLevel level)) return null;
+        BlockPos here = mob.blockPosition();
+        BlockPos best = null;
+        double bestScore = Double.MAX_VALUE;
+        int tested = 0;
+        // Bounded, infrequent scan (16 block radius) using ONLY loaded
+        // chunks. Do not search paths for every floor block.
+        for (int x = here.getX() - 16; x <= here.getX() + 16; x++) {
+            for (int z = here.getZ() - 16; z <= here.getZ() + 16; z++) {
+                if (level.getChunkSource().getChunkNow(Math.floorDiv(x,16),
+                        Math.floorDiv(z,16)) == null) continue;
+                for (int y = here.getY() - 5; y <= here.getY(); y++) {
+                    BlockPos base = new BlockPos(x, y, z);
+                    var state = level.getBlockState(base);
+                    if (!(state.getBlock() instanceof StairBlock)
+                            && !state.is(Blocks.LADDER)
+                            && !state.is(Blocks.SCAFFOLDING)) continue;
+                    BlockPos waypoint = base.above();
+                    if (waypoint.distSqr(here) <= 4) continue;
+                    // Limit expensive navigation probes even for a huge
+                    // decorative stairway covered in stair blocks.
+                    if (++tested > 20) return best;
+                    Path path = mob.getNavigation().createPath(waypoint, 1);
+                    if (path == null || !path.canReach()) continue;
+                    double score = here.distSqr(waypoint)
+                            + waypoint.distSqr(destination) * 0.15
+                            + Math.max(0, waypoint.getY() - destination.getY()) * 1.5;
+                    if (score < bestScore) {
+                        bestScore = score;
+                        best = waypoint.immutable();
+                    }
+                }
+            }
+        }
+        return best;
     }
 
     private BlockPos shortHop(PathfinderMob mob, BlockPos target) {
