@@ -1,3 +1,4 @@
+// Modified by Kesley, 2026-10-19: package upstream license and Extended notices.
 plugins {
 	id 'net.fabricmc.fabric-loom' version "${loom_version}"
 	id 'maven-publish'
@@ -27,6 +28,7 @@ loom {
 }
 
 dependencies {
+	testImplementation "junit:junit:4.13.2"
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	
@@ -61,10 +63,11 @@ java {
 }
 
 jar {
+	from("../NOTICE")
 	def projectName = project.name
 	inputs.property "projectName", projectName
 
-	from("LICENSE") {
+	from("../LICENSE") {
 		rename { "${it}_$projectName"}
 	}
 }
@@ -85,3 +88,7 @@ publishing {
 		// retrieving dependencies.
 	}
 }
+
+
+// Run category regressions as part of every Gradle build.
+test { useJUnit() }

@@ -1,7 +1,10 @@
+/* Modified by Kesley for Smart Copper Golems Extended, 2026-10-19: category filters and deposit revalidation. Original: GameMech007, Apache-2.0. */
 package com.anantaya.smartcgolem.ai;
 
 import com.google.common.collect.ImmutableMap;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 import net.minecraft.core.particles.ColorParticleOption;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -23,10 +26,8 @@ import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.core.particles.ParticleTypes;
 import org.jspecify.annotations.NonNull;
 
-import java.util.HashSet;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -43,8 +44,11 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         RETURN_TO_SOURCE
     }
 
-    private static final Set<BlockPos> LOCKED_CHESTS = new HashSet<>();
-    private static final Map<BlockPos, Long> LOCKED_CHESTS_TIMESTAMP = new HashMap<>();
+    // A block position alone is not unique: different dimensions share coordinates.
+    private record ChestLockKey(ResourceKey<Level> dimension, BlockPos pos) {}
+    private record ChestLockLease(SmartTransportItemsBehavior owner, long lastTouchedTick) {}
+
+    private static final Map<ChestLockKey, ChestLockLease> LOCKED_CHESTS = new HashMap<>();
 
     private static final long LOCK_STALE_TICKS = 600;
 
@@ -69,7 +73,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private BlockPos currentWalkTarget = null;
     private BlockPos lastPickupChest = null;
     private BlockPos returnToSourceChest = null;
-    private BlockPos lockedChest = null;
+    private ChestLockKey lockedChest = null;
 
     private Container openedContainer = null;
     private CopperGolem openedCopperGolem = null;
@@ -134,76 +138,62 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 || state == TaskState.INTERACT_DESTINATION;
     }
 
-    private boolean isChestLocked(BlockPos pos, long gameTime) {
+    /**
+     * Reserve a chest for this golem. Leases are scoped to a dimension and owner;
+     * an expired owner's eventual cleanup must never remove a successor's lease.
+     * Returns true when another golem currently owns the reservation.
+     */
+    private boolean tryLockChest(ResourceKey<Level> dimension, BlockPos pos, long gameTime) {
+        if (pos == null) return true;
+
+        ChestLockKey key = new ChestLockKey(dimension, pos);
         synchronized (LOCKED_CHESTS) {
-            if (!LOCKED_CHESTS.contains(pos)) {
+            ChestLockLease existing = LOCKED_CHESTS.get(key);
+            if (existing != null && existing.owner() != this
+                    && gameTime - existing.lastTouchedTick() <= LOCK_STALE_TICKS) {
                 return true;
             }
 
-            Long lockedAt = LOCKED_CHESTS_TIMESTAMP.get(pos);
-
-            if (lockedAt != null && gameTime - lockedAt > LOCK_STALE_TICKS) {
-                System.out.println("[SMART-GOLEM CHEST-LOCK-STALE] clearing stale lock=" + pos);
-                LOCKED_CHESTS.remove(pos);
-                LOCKED_CHESTS_TIMESTAMP.remove(pos);
-                return true;
+            if (existing != null && existing.owner() != this) {
+                System.out.println("[SMART-GOLEM CHEST-LOCK-STALE] reclaiming stale lock=" + key);
             }
 
+            LOCKED_CHESTS.put(key, new ChestLockLease(this, gameTime));
+            lockedChest = key;
             return false;
         }
     }
 
-    private boolean tryLockChest(BlockPos pos, long gameTime) {
-        if (pos == null) {
-            return true;
-        }
-
-        if (pos.equals(lockedChest)) {
-
-            synchronized (LOCKED_CHESTS) {
-                LOCKED_CHESTS_TIMESTAMP.put(pos, gameTime);
-            }
-            return false;
-        }
-
+    /** Keep the original availability check used by both WAIT states. */
+    private boolean isChestLocked(ResourceKey<Level> dimension, BlockPos pos, long gameTime) {
+        ChestLockKey key = new ChestLockKey(dimension, pos);
         synchronized (LOCKED_CHESTS) {
-            if (LOCKED_CHESTS.contains(pos)) {
-                Long lockedAt = LOCKED_CHESTS_TIMESTAMP.get(pos);
-
-                if (lockedAt != null && gameTime - lockedAt > LOCK_STALE_TICKS) {
-                    System.out.println("[SMART-GOLEM CHEST-LOCK-STALE] reclaiming stale lock=" + pos);
-                } else {
-                    return true;
-                }
+            ChestLockLease existing = LOCKED_CHESTS.get(key);
+            if (existing == null) return true;
+            if (gameTime - existing.lastTouchedTick() > LOCK_STALE_TICKS) {
+                LOCKED_CHESTS.remove(key);
+                return true;
             }
-
-            LOCKED_CHESTS.add(pos);
-            LOCKED_CHESTS_TIMESTAMP.put(pos, gameTime);
-            lockedChest = pos;
-
-            System.out.println("[SMART-GOLEM CHEST-LOCK] locked=" + pos);
             return false;
         }
     }
 
     private void unlockChest() {
-        if (lockedChest == null) {
-            return;
-        }
-
+        if (lockedChest == null) return;
         synchronized (LOCKED_CHESTS) {
-            LOCKED_CHESTS.remove(lockedChest);
-            LOCKED_CHESTS_TIMESTAMP.remove(lockedChest);
-            System.out.println("[SMART-GOLEM CHEST-UNLOCK] unlocked=" + lockedChest);
+            ChestLockLease existing = LOCKED_CHESTS.get(lockedChest);
+            if (existing != null && existing.owner() == this) {
+                LOCKED_CHESTS.remove(lockedChest);
+                System.out.println("[SMART-GOLEM CHEST-UNLOCK] unlocked=" + lockedChest);
+            }
         }
-
         lockedChest = null;
     }
 
     private void switchState(PathfinderMob mob, TaskState newState, BlockPos target, long gameTime) {
 
         if (needsChestLock(newState)) {
-            if (tryLockChest(target, gameTime)) {
+            if (tryLockChest(mob.level().dimension(), target, gameTime)) {
                 System.out.println("[SMART-GOLEM CHEST-LOCK-FAILED] target busy=" + target);
 
                 if (newState == TaskState.INTERACT_SOURCE) {
@@ -278,7 +268,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     return;
                 }
 
-                if (isChestLocked(currentTarget, gameTime) && !isChestBusy(chest)) {
+                if (isChestLocked(level.dimension(), currentTarget, gameTime) && !isChestBusy(chest)) {
                     switchState(mob, TaskState.INTERACT_SOURCE, currentTarget, gameTime);
                 }
             }
@@ -312,7 +302,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     return;
                 }
 
-                if (isChestLocked(currentTarget, gameTime) && !isChestBusy(chest)) {
+                if (isChestLocked(level.dimension(), currentTarget, gameTime) && !isChestBusy(chest)) {
                     switchState(mob, TaskState.INTERACT_DESTINATION, currentTarget, gameTime);
                 }
             }
@@ -961,6 +951,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             ItemStack held
     ) {
 
+        // Re-read filters at insertion time: frames may change while the golem walks.
+        FrameFilterResult filter = getFrameFilterResult(level, chestPos, held);
+        if (filter.hasFrame() && !filter.matchesHeld()) return held.copy();
         ItemStack remaining = held.copy();
 
         for (int i = 0; i < chest.getContainerSize(); i++) {
@@ -1108,60 +1101,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             BlockPos chestPos,
             ItemStack held
     ) {
-        boolean hasFrame = false;
-
-        AABB box = new AABB(chestPos).inflate(1.0D);
-
-        for (ItemFrame frame : level.getEntitiesOfClass(ItemFrame.class, box)) {
-
-            BlockPos attachedPos
-                    = frame.blockPosition().relative(frame.getDirection().getOpposite());
-
-            if (!attachedPos.equals(chestPos)) {
-
-                boolean matchesDoubleChest = false;
-
-                BlockState state = level.getBlockState(chestPos);
-
-                if (state.getBlock() instanceof ChestBlock) {
-
-                    for (BlockPos nearby : new BlockPos[] {
-                            chestPos.north(),
-                            chestPos.south(),
-                            chestPos.east(),
-                            chestPos.west()
-                    }) {
-
-                        BlockState nearbyState = level.getBlockState(nearby);
-
-                        if (nearbyState.getBlock() == state.getBlock()
-                                && attachedPos.equals(nearby)) {
-
-                            matchesDoubleChest = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!matchesDoubleChest) {
-                    continue;
-                }
-            }
-
-            ItemStack frameItem = frame.getItem();
-
-            if (frameItem.isEmpty()) {
-                continue;
-            }
-
-            hasFrame = true;
-
-            if (!held.isEmpty() && ItemStack.isSameItemSameComponents(frameItem, held)) {
-                return new FrameFilterResult(true, true, frameItem.copy());
-            }
-        }
-
-        return new FrameFilterResult(hasFrame, false, ItemStack.EMPTY);
+        var result = com.anantaya.smartcgolem.util.ItemFrameHelper.filter(level, chestPos, held);
+        return new FrameFilterResult(result.hasFrame(), result.matchesHeld(), result.matchedFrameItem());
     }
 
     @Override
@@ -1333,7 +1274,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             return true;
         }
 
-        if (tryLockChest(depositTarget, gameTime)) {
+        if (tryLockChest(level.dimension(), depositTarget, gameTime)) {
             System.out.println("[SMART-GOLEM MAGIC-DEPOSIT-WAIT] Chest locked by another golem: " + depositTarget);
             resetStuckTracking(mob, gameTime);
             return false;
@@ -1452,3 +1393,4 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         );
     }
 }
+

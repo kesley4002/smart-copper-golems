@@ -1,0 +1,38 @@
+name: Fabric prototype validation
+on:
+  push:
+    branches: ['feature/smart-categories-26.2']
+  pull_request:
+    branches: ['v-26.2']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: Fabric
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/wrapper-validation@v6
+      - name: Compile and validate Fabric
+        run: bash gradlew --no-daemon build
+      - name: Verify singleplayer and dedicated-server Fabric metadata
+        run: >-
+          python3 -c 'import json, pathlib, zipfile;
+          jars = [p for p in pathlib.Path("build/libs").glob("*.jar") if not p.name.endswith("-sources.jar")];
+          assert len(jars) == 1, jars;
+          meta = json.loads(zipfile.ZipFile(jars[0]).read("fabric.mod.json"));
+          assert meta["environment"] == "*", meta;
+          print("Fabric metadata allows singleplayer and dedicated server:", jars[0])'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: smart-copper-golems-extended-fabric-prototype
+          path: Fabric/build/libs/*.jar
+          if-no-files-found: error
