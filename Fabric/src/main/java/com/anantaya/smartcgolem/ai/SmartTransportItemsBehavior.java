@@ -379,7 +379,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 long elapsed = gameTime - stretchStageStartTick;
                 if (mob instanceof CopperGolem copper && elapsed % 20 == 0)
                     com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
-                            com.anantaya.smartcgolem.animation.StretchManager.GROW, (int)Math.min(elapsed,101L), stretchMaxProgress);
+                            com.anantaya.smartcgolem.animation.StretchManager.GROW, (int)Math.min(elapsed,com.anantaya.smartcgolem.animation.StretchManager.DURATION), stretchMaxProgress);
                 if (elapsed >= com.anantaya.smartcgolem.animation.StretchManager.DURATION) {
                     if (mob instanceof CopperGolem copper)
                         com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
@@ -398,7 +398,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 long elapsed = gameTime - stretchStageStartTick;
                 if (mob instanceof CopperGolem copper && elapsed % 20 == 0)
                     com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
-                            com.anantaya.smartcgolem.animation.StretchManager.SHRINK, (int)Math.min(elapsed,101L), stretchMaxProgress);
+                            com.anantaya.smartcgolem.animation.StretchManager.SHRINK, (int)Math.min(elapsed,com.anantaya.smartcgolem.animation.StretchManager.DURATION), stretchMaxProgress);
                 if (elapsed >= com.anantaya.smartcgolem.animation.StretchManager.DURATION) {
                     if (mob instanceof CopperGolem copper)
                         com.anantaya.smartcgolem.animation.StretchManager.stop(level, copper);
