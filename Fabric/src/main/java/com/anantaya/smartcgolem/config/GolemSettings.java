@@ -2,7 +2,7 @@ package com.anantaya.smartcgolem.config;
 
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import java.nio.file.*;
 import java.io.*;
 import java.util.*;
@@ -55,7 +55,7 @@ public final class GolemSettings {
         Set<String> result = new LinkedHashSet<>();
         for (String token : raw.split(",")) {
             String id = token.trim();
-            ResourceLocation key = ResourceLocation.tryParse(id);
+            Identifier key = Identifier.tryParse(id);
             if (key == null || !BuiltInRegistries.ITEM.containsKey(key)) {
                 throw new IllegalArgumentException("ID de item invalido: " + id);
             }
