@@ -28,7 +28,7 @@ public final class FrameRotationCommands {
                                 .executes(ctx -> rotateLoaded(ctx.getSource(), 1))));
     }
 
-    private static int rotateLoaded(CommandSourceStack source, int rotation) {
+    public static int rotateLoaded(CommandSourceStack source, int rotation) {
         ServerLevel level = source.getLevel();
         int changed = 0;
         int already = 0;
