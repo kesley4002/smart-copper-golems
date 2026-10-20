@@ -383,12 +383,29 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             return;
         }
 
+        // Minecraft navigation has a much shorter practical path range
+        // than the configured 500-block work square. Travel in short hops
+        // towards distant storage, while retaining the actual target for
+        // arrival checks and the existing stuck/magic-deposit logic.
         BehaviorUtils.setWalkAndLookTargetMemories(
                 mob,
-                currentWalkTarget,
+                shortHop(mob, currentWalkTarget),
                 speedModifier,
                 0
         );
+    }
+
+    private BlockPos shortHop(PathfinderMob mob, BlockPos target) {
+        BlockPos origin = mob.blockPosition();
+        double dx = target.getX() - origin.getX();
+        double dz = target.getZ() - origin.getZ();
+        double distance = Math.hypot(dx, dz);
+        if (distance <= 20) return target;
+        double scale = 16.0 / distance;
+        return new BlockPos(
+                origin.getX() + (int)Math.round(dx * scale),
+                origin.getY(),
+                origin.getZ() + (int)Math.round(dz * scale));
     }
 
     private boolean hasArrived(PathfinderMob mob) {
@@ -790,11 +807,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             BaseContainerBlockEntity chest = getSourceBlockEntity(level, pos);
             if (chest == null || !hasAnyItem(getActualContainer(level, pos, chest))) continue;
 
-            double pathCost = getPathCost(mob, pos);
-
-            if (pathCost == Double.MAX_VALUE) {
-                continue;
-            }
+            // Only require an immediate path when close. For distant
+            // marked inputs, the golem travels in navigation-sized hops.
+            if (mob.blockPosition().distSqr(pos) <= 24 * 24
+                    && getPathCost(mob, pos) == Double.MAX_VALUE) continue;
 
             return pos;
         }
@@ -1140,7 +1156,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private void returnHome(PathfinderMob mob, CopperGolem golem) {
         BlockPos home = ServerWorkZoneSettings.anchor(golem);
         if (mob.blockPosition().distSqr(home) > 9) {
-            BehaviorUtils.setWalkAndLookTargetMemories(mob, home, speedModifier, 2);
+            BehaviorUtils.setWalkAndLookTargetMemories(mob,
+                    shortHop(mob, home), speedModifier, 2);
         } else {
             mob.getNavigation().stop();
         }
