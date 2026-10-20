@@ -1021,7 +1021,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 System.out.println("[SMART-GOLEM PICKUP AFTER] tick=" + level.getGameTime()
                         + " chest=" + currentTarget
                         + " slot=" + i
-                        + " remainingStack=" + chest.getItem(i)
+                        + " remainingStack=" + contents.getItem(i)
                         + " mobHand=" + mob.getMainHandItem());
 
                 return true;
