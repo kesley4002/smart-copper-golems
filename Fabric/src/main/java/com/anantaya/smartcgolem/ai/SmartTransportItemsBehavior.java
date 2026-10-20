@@ -5,6 +5,10 @@ import com.google.common.collect.ImmutableMap;
 import com.anantaya.smartcgolem.util.SearchVolume;
 import com.anantaya.smartcgolem.ServerWorkZoneSettings;
 import com.anantaya.smartcgolem.util.ItemFrameHelper;
+import com.anantaya.smartcgolem.util.StorageFrameIndex;
+import com.anantaya.smartcgolem.ServerCarrySettings;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
 import com.anantaya.smartcgolem.util.ContainerAlphabetizer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
@@ -99,6 +103,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
     private int ticksAtTarget = 0;
     private long nextSearchTick = 0;
+    private long lastNoDestinationAlertTick = -100000L;
+    private String lastNoDestinationAlertItemId = "";
 
     private static final int ARRIVAL_DISTANCE_SQUARED = 4;
     // Wider work zones are scanned only once every 5 seconds per golem.
@@ -814,7 +820,17 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
     private BlockPos findSourceChest(ServerLevel level, PathfinderMob mob) {
 
-        for (BlockPos pos : collectCandidates(level, mob, state -> sourceBlockType.test(state) || destinationBlockType.test(state))) {
+        // Copper source chests remain backwards compatible. Stick-marked
+        // ordinary chests and barrels come from the shared frame index.
+        java.util.LinkedHashSet<BlockPos> combined = new java.util.LinkedHashSet<>(
+                collectCandidates(level, mob, sourceBlockType));
+        combined.addAll(StorageFrameIndex.markedSources(level));
+        java.util.List<BlockPos> sources = new java.util.ArrayList<>(combined);
+        sources.sort((a,b) -> Double.compare(getRoughDistance(mob,a), getRoughDistance(mob,b)));
+        BlockPos home = mob instanceof CopperGolem c ? ServerWorkZoneSettings.anchor(c) : mob.blockPosition();
+        for (BlockPos pos : sources) {
+            if (!ServerWorkZoneSettings.contains(home, pos)
+                    || Math.abs((long)pos.getY() - mob.blockPosition().getY()) > 64) continue;
 
             BaseContainerBlockEntity chest = getSourceBlockEntity(level, pos);
             if (chest == null || !hasAnyItem(getActualContainer(level, pos, chest))) continue;
@@ -830,143 +846,62 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         return null;
     }
 
+    /**
+     * Strict routing: only indexed, loaded frames that explicitly match this
+     * item can be selected. There is NO fallback to unframed containers and
+     * NO last-resort return deposit into the source chest.
+     */
     private BlockPos findDestinationChest(ServerLevel level, PathfinderMob mob) {
-
         ItemStack held = mob.getMainHandItem();
-
         if (held.isEmpty()) {
             markDestinationSelection(false, true);
             return null;
-
         }
-
-        java.util.List<BlockPos> candidates = collectCandidates(level, mob, destinationBlockType);
-
-
+        BlockPos home = mob instanceof CopperGolem c
+                ? ServerWorkZoneSettings.anchor(c) : mob.blockPosition();
+        java.util.List<BlockPos> candidates = new java.util.ArrayList<>(
+                StorageFrameIndex.destinations(level, held));
+        candidates.sort((a,b) -> Double.compare(getRoughDistance(mob,a), getRoughDistance(mob,b)));
         for (BlockPos pos : candidates) {
-
-            if (pos.equals(lastPickupChest) || ItemFrameHelper.hasSourceMarker(level, pos)) {
-                continue;
-            }
-
+            if (!ServerWorkZoneSettings.contains(home, pos)
+                    || Math.abs((long)pos.getY() - mob.blockPosition().getY()) > 64) continue;
+            if (pos.equals(lastPickupChest) || ItemFrameHelper.hasSourceMarker(level, pos)) continue;
             BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
-            if (chest == null) {
-                continue;
-            }
-
-            Container targetContainer = getActualContainer(level, pos, chest);
-
-            if (hasSpaceFor(targetContainer, held)) {
-                System.out.println("[SMART-GOLEM FULL-CHEST] Skipping matching chest because full: " + pos);
-                continue;
-            }
-
-            FrameFilterResult frameFilter = getFrameFilterResult(level, pos, held);
-
-            if (!frameFilter.hasFrame()) {
-                continue;
-            }
-
-            System.out.println("[SMART-GOLEM MATCH-CHECK] chest=" + pos
-                    + " matchedFrameItem=" + frameFilter.matchedFrameItem()
-                    + " holding=" + held
-                    + " matches=" + frameFilter.matchesHeld());
-
-            if (!frameFilter.matchesHeld()) {
-                continue;
-            }
-
+            if (chest == null) continue;
+            FrameFilterResult filter = getFrameFilterResult(level, pos, held);
+            if (!filter.hasFrame() || !filter.matchesHeld()) continue;
+            Container actual = getActualContainer(level, pos, chest);
+            if (hasSpaceFor(actual, held)) continue;
             double pathCost = getPathCost(mob, pos);
             boolean reachable = pathCost != Double.MAX_VALUE;
-
-            if (!reachable) {
-                System.out.println("[SMART-GOLEM MATCHED-NO-PATH] Matched framed chest is unreachable. "
-                        + "Will allow magic deposit after stuck timeout. chest=" + pos);
-            } else {
-                System.out.println("[SMART-GOLEM MATCHED-PATH] Matched framed chest is reachable. chest=" + pos);
-            }
-
+            // Beneath the golem: allow the navigator to find stairs/entrances
+            // over multiple ticks; never use an instantaneous remote deposit.
+            if (pos.getY() < mob.blockPosition().getY() - 2 && !reachable
+                    && mob.blockPosition().distSqr(pos) < 25) continue;
             markDestinationSelection(true, reachable);
             return pos;
         }
-
-
-        System.out.println("[SMART-GOLEM FALLBACK-SEARCH] No matching framed chest for "
-                + held + ". Searching unfiltered destination chest.");
-
-        for (BlockPos pos : candidates) {
-
-            if (pos.equals(lastPickupChest) || ItemFrameHelper.hasSourceMarker(level, pos)) {
-                continue;
-            }
-
-            BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
-            if (chest == null) {
-                continue;
-            }
-
-            FrameFilterResult frameFilter = getFrameFilterResult(level, pos, held);
-
-            if (frameFilter.hasFrame()) {
-                System.out.println("[SMART-GOLEM FALLBACK-SKIP] Chest is filtered: " + pos);
-                continue;
-            }
-
-            Container targetContainer = getActualContainer(level, pos, chest);
-
-            if (hasSpaceFor(targetContainer, held)) {
-                System.out.println("[SMART-GOLEM FULL-CHEST] Skipping fallback chest because full: " + pos);
-                continue;
-            }
-
-            double pathCost = getPathCost(mob, pos);
-
-            if (pathCost == Double.MAX_VALUE) {
-                continue;
-            }
-
-            System.out.println("[SMART-GOLEM FALLBACK-DEPOSIT] Selected unfiltered chest=" + pos);
-            markDestinationSelection(false, true);
-            return pos;
-        }
-
-        for (BlockPos pos : candidates) {
-
-            if (!pos.equals(lastPickupChest) || ItemFrameHelper.hasSourceMarker(level, pos)) {
-                continue;
-            }
-
-            BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
-            if (chest == null) {
-                continue;
-            }
-
-            Container targetContainer = getActualContainer(level, pos, chest);
-
-            if (hasSpaceFor(targetContainer, held)) {
-                continue;
-            }
-
-            FrameFilterResult frameFilter = getFrameFilterResult(level, pos, held);
-
-            if (frameFilter.hasFrame() && !frameFilter.matchesHeld()) {
-                continue;
-            }
-
-            double pathCost = getPathCost(mob, pos);
-
-            if (pathCost == Double.MAX_VALUE) {
-                continue;
-            }
-
-            System.out.println("[SMART-GOLEM LAST-RESORT-DEPOSIT] Depositing back into source chest=" + pos);
-            markDestinationSelection(frameFilter.hasFrame(), true);
-            return pos;
-        }
-
-        System.out.println("[SMART-GOLEM NO-TARGET] No matching chest and no unfiltered fallback chest found for " + held);
-
+        markDestinationSelection(false, true);
+        reportMissingDestination(level, mob, held);
         return null;
+    }
+
+    private void reportMissingDestination(ServerLevel level, PathfinderMob mob, ItemStack held) {
+        String id = BuiltInRegistries.ITEM.getKey(held.getItem()).toString();
+        long now = level.getGameTime();
+        if (lastNoDestinationAlertItemId.equals(id)
+                && now - lastNoDestinationAlertTick < 2400L) return;
+        lastNoDestinationAlertTick = now;
+        lastNoDestinationAlertItemId = id;
+        String category = com.anantaya.smartcgolem.util.SmartCategories.category(held);
+        String message = "[Smart Golem] Nenhum baú com moldura compatível para "
+                + held.getHoverName().getString() + " (" + id + ")."
+                + (category == null ? " Item sem categoria definida." : " Categoria: " + category + ".");
+        for (var player : level.players()) {
+            if (player.distanceToSqr(mob) <= 64 * 64)
+                player.sendSystemMessage(Component.literal(message));
+        }
+        System.out.println(message);
     }
 
     /**
@@ -1027,7 +962,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
             if (!stack.isEmpty()) {
 
-                int takeAmount = Math.min(stack.getCount(), stack.getMaxStackSize());
+                int takeAmount = Math.min(Math.min(stack.getCount(), stack.getMaxStackSize()), ServerCarrySettings.maximum());
                 ItemStack taken = stack.copyWithCount(takeAmount);
 
                 System.out.println("[SMART-GOLEM PICKUP BEFORE] tick=" + level.getGameTime()
@@ -1070,7 +1005,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         // Re-read filters at insertion time: frames may change while the golem walks.
         FrameFilterResult filter = getFrameFilterResult(level, chestPos, held);
-        if (filter.hasFrame() && !filter.matchesHeld()) return held.copy();
+        // Never deposit into an empty/unframed destination, even if the
+        // user removes its moldura between path selection and insertion.
+        if (!filter.hasFrame() || !filter.matchesHeld()
+                || ItemFrameHelper.hasSourceMarker(level, chestPos)) return held.copy();
         ItemStack remaining = held.copy();
 
         for (int i = 0; i < chest.getContainerSize(); i++) {
@@ -1312,6 +1250,11 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private boolean tryMagicDepositIfStuck(ServerLevel level, PathfinderMob mob, long gameTime) {
 
         if (!currentDestinationIsFramedMatch) {
+            return false;
+        }
+        // Underground chests must be reached via real paths (e.g. stairs);
+        // do not teleport inventory vertically through a solid floor.
+        if (currentTarget != null && currentTarget.getY() < mob.blockPosition().getY() - 2) {
             return false;
         }
 
