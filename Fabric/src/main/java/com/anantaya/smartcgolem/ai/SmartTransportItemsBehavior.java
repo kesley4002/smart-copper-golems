@@ -1,6 +1,9 @@
 package com.anantaya.smartcgolem.ai;
 
 import com.google.common.collect.ImmutableMap;
+import com.anantaya.smartcgolem.config.GolemSettings;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ColorParticleOption;
 import net.minecraft.server.level.ServerLevel;
@@ -81,6 +84,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
     private static final int ARRIVAL_DISTANCE_SQUARED = 4;
     private static final int SEARCH_COOLDOWN_TICKS = 20;
+    private static final Map<String, Long> NOTICE_COOLDOWNS = new HashMap<>();
+    private static final long NOTICE_INTERVAL_TICKS = 1200;
 
     public SmartTransportItemsBehavior(
             float speedModifier,
@@ -520,10 +525,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 } else {
                     // Put the item straight back where it came from; never leave it
                     // stranded in the golem hand when no category exists.
+                    ItemStack heldItemForWarning = mob.getMainHandItem().copy();
                     ItemStack remaining = insertIntoChest(
                             level, currentTarget, getActualContainer(level, currentTarget, chest),
                             mob.getMainHandItem());
                     mob.setItemInHand(InteractionHand.MAIN_HAND, remaining);
+                    notifyMissingDestination(level, heldItemForWarning, gameTime);
                     System.out.println("[SMART-GOLEM NO-DESTINATION] Item returned to source: " + currentTarget);
                     switchState(mob, TaskState.IDLE, null, gameTime);
                 }
@@ -860,7 +867,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
             if (!stack.isEmpty()) {
 
-                int takeAmount = Math.min(stack.getCount(), stack.getMaxStackSize());
+                int takeAmount = Math.min(stack.getCount(), Math.min(stack.getMaxStackSize(), GolemSettings.capacity()));
                 ItemStack taken = stack.copyWithCount(takeAmount);
 
                 System.out.println("[SMART-GOLEM PICKUP BEFORE] tick=" + level.getGameTime()
@@ -1036,6 +1043,19 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         return false;
     }
 
+    private void notifyMissingDestination(ServerLevel level, ItemStack held, long gameTime) {
+        if (held.isEmpty()) return;
+        String id = BuiltInRegistries.ITEM.getKey(held.getItem()).toString();
+        String key = level.dimension().toString() + ":" + id;
+        Long previous = NOTICE_COOLDOWNS.get(key);
+        if (previous != null && gameTime - previous < NOTICE_INTERVAL_TICKS) return;
+        NOTICE_COOLDOWNS.put(key, gameTime);
+        Component message = Component.literal("[Smart Golem] Nenhum bau compativel encontrado para ")
+                .append(held.getHoverName())
+                .append(Component.literal(" (" + id + ")."));
+        for (var player : level.players()) player.sendSystemMessage(message);
+    }
+
     private record FrameFilterResult(
             boolean hasFrame,
             boolean matchesHeld,
@@ -1096,7 +1116,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 continue;
             }
 
-            if (!held.isEmpty() && ItemStack.isSameItemSameComponents(frameItem, held)) {
+            if (!held.isEmpty() && (frame.getRotation() == 0
+                    ? ItemStack.isSameItemSameComponents(frameItem, held)
+                    : GolemSettings.sameCategory(frameItem, held))) {
                 return new FrameFilterResult(true, true, frameItem.copy());
             }
         }
