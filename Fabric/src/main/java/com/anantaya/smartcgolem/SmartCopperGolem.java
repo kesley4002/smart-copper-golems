@@ -41,6 +41,7 @@ public class SmartCopperGolem implements ModInitializer {
             dispatcher.register(Commands.literal("scg")
                     .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_MODERATOR))
                     .then(languageNode())
+                    .then(FrameRotationCommands.node())
                     .then(Commands.literal("radius")
                         .executes(ctx -> showRadius(ctx.getSource()))
                         .then(Commands.argument("width", IntegerArgumentType.integer(16,1000))
