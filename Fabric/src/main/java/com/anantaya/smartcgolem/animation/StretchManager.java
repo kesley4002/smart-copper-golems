@@ -20,15 +20,19 @@ public final class StretchManager {
     public static void initialize() {
         PayloadTypeRegistry.clientboundPlay().register(StretchPayload.TYPE, StretchPayload.CODEC);
     }
-    public static void clear() { CURRENT.clear(); }
+    public static void clear() { CURRENT.clear(); StretchBridgeFile.reset(); }
     public static void set(ServerLevel level, CopperGolem golem, int stage, int age, int maxProgress) {
         int capped = Math.max(0, Math.min(1000, maxProgress));
         Session previous = CURRENT.put(golem.getUUID(), new Session(stage, age, capped));
         if (previous != null && previous.stage == stage && previous.age == age && previous.maxProgress == capped) return;
+        StretchBridgeFile.transition(golem, stage, capped);
         send(level, golem, stage, age, capped);
     }
     public static void stop(ServerLevel level, CopperGolem golem) {
-        if (CURRENT.remove(golem.getUUID()) != null) send(level, golem, IDLE, 0, 0);
+        if (CURRENT.remove(golem.getUUID()) != null) {
+            StretchBridgeFile.transition(golem, IDLE, 0);
+            send(level, golem, IDLE, 0, 0);
+        }
     }
     private static void send(ServerLevel level, CopperGolem golem, int stage, int age, int maxProgress) {
         StretchPayload payload = new StretchPayload(golem.getId(), stage, age, maxProgress);
