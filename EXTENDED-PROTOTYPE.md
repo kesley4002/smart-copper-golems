@@ -9,7 +9,8 @@ Protótipo em desenvolvimento na branch separada do fork; não é uma release.
 A autorização GitHub foi corrigida e a branch remota criada em 2026-10-19.
 24 testes da política de categorias passaram usando o lançador de código-fonte Java.
 A compilação completa é validada pelo GitHub Actions com Java 25.
-Os testes de servidor e integração Geyser/Floodgate continuam pendentes.
+Os testes no mundo singleplayer, em servidor dedicado e a integração Geyser/Floodgate continuam pendentes.
+Em 2026-10-19 o primeiro teste em singleplayer revelou que a declaração `environment: server` fazia o Fabric ignorar o mod ao abrir o cliente. Corrigido para `environment: *` (o comportamento só altera lógica de jogo do lado do servidor, inclusive o servidor integrado).
 
 ## Como usar depois de compilar e validar
 
@@ -53,8 +54,7 @@ O empilhamento continua exigindo igualdade exata de item e componentes.
 Barris e shulkers ainda não são destinos. A busca vertical existente NÃO prova
 interação a quatro blocos: isso exige mudar pontos de aproximação e testar alcance.
 O depósito remoto preexistente foi preservado e precisa ser revisado nessa etapa.
-Os bloqueios estáticos do original são por posição sem dimensão; há risco de
-contenção entre dimensões, ainda não corrigido nesta alteração focada nos filtros.
+Os bloqueios estáticos do original foram corrigidos para incluir dimensão e dono da reserva; a melhoria foi compilada com sucesso, mas ainda requer testes com vários golems.
 Animação de barris e pernas telescópicas permanecem adiadas.
 
 ## Compilação e testes necessários
@@ -68,8 +68,8 @@ ser confirmada no primeiro build. LICENSE e NOTICE entram no JAR.
 
 Antes de considerar funcional, executar em um mundo de teste:
 
-1. Iniciar servidor dedicado Fabric 26.2 com o JAR e Fabric API; verificar mixins.
-2. Conectar cliente Java sem instalar o mod no cliente.
+1. Iniciar um mundo singleplayer Fabric 26.2 com o JAR na pasta de mods do cliente e Fabric API; no `latest.log`, confirmar `smart-copper-golem` entre os mods carregados e a mensagem `Copper Golems are smart now!`.
+2. Iniciar servidor dedicado Fabric 26.2 com o mesmo JAR e Fabric API; verificar mixins e conectar um cliente Java sem o mod.
 3. Confirmar filtros exatos com itens renomeados/encantados e diferentes componentes.
 4. Para cada categoria, transportar dois itens diferentes e rejeitar outra categoria.
 5. Testar ambos os lados do baú duplo; dois baús simples vizinhos não compartilham filtro.
@@ -80,8 +80,10 @@ Antes de considerar funcional, executar em um mundo de teste:
 10. Repetir interação com molduras e transporte usando cliente Bedrock via Geyser/Floodgate,
     registrando versões de servidor, clientes e ponte. Compatibilidade ainda NÃO comprovada.
 
-A instalação é declarada `server`; nenhum item, entidade, pacote ou recurso de
-cliente novo foi introduzido. Isso favorece a estratégia de compatibilidade,
-mas não substitui os testes acima.
+A instalação do lado Fabric é declarada `*` para permitir que o mod carregue tanto
+em servidores dedicados quanto no cliente que hospeda o mundo singleplayer (servidor integrado).
+Ao usar servidor dedicado, a intenção é instalar o JAR somente no servidor; nenhum item,
+entidade, pacote ou recurso novo de cliente foi introduzido. A compatibilidade com Geyser/Floodgate
+não está comprovada e exige os testes acima.
 
 Créditos originais e licença Apache 2.0 preservados. Modificações: Kesley, 2026-10-19.
