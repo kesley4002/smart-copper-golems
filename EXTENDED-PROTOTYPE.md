@@ -51,11 +51,32 @@ O empilhamento continua exigindo igualdade exata de item e componentes.
 
 ## Fora do escopo desta alteração inicial
 
-Barris e shulkers ainda não são destinos. A busca vertical existente NÃO prova
+Barris ainda não são destinos. Caixas de shulker foram retiradas do planejamento por decisão do projeto; não serão integradas. A busca vertical existente NÃO prova
 interação a quatro blocos: isso exige mudar pontos de aproximação e testar alcance.
 O depósito remoto preexistente foi preservado e precisa ser revisado nessa etapa.
 Os bloqueios estáticos do original foram corrigidos para incluir dimensão e dono da reserva; a melhoria foi compilada com sucesso, mas ainda requer testes com vários golems.
 Animação de barris e pernas telescópicas permanecem adiadas.
+
+## Etapa 2 — otimização experimental (branch `feature/ai-optimization-26.2`)
+
+Após o usuário validar as seis categorias no singleplayer, a etapa 2 preserva todos os filtros e
+substitui a busca exaustiva de 71.825 posições de blocos por uma inspeção das posições de
+block entities em chunks já carregados. Os candidatos continuam dentro dos mesmos limites
+horizontais e verticais e são ordenados pela mesma distância, sem carregar chunks adicionais.
+O custo efetivo passa a depender dos recipientes e demais block entities presentes nesses chunks,
+não da quantidade de blocos de ar, pedra ou terra. Há testes JUnit dos limites negativos e inclusivos.
+**A compilação não garante melhora de FPS/TPS:** é necessário comparar em mundos de teste.
+
+Testar antes de integrar barris (etapa 3):
+1. Repetir minerais e madeira com uma única moldura 45°, depois os outros quatro filtros.
+2. Conferir baú duplo, filtros exatos (0°), baú sem filtro e prioridade do baú filtrado.
+3. Testar baús na borda de chunks, coordenadas negativas, 32 blocos na horizontal e 8 na vertical.
+4. Testar 1, 5 e 10 golems no mesmo mundo, comparando fluidez com a versão anterior.
+5. Conferir que chunks distantes NÃO são forçados a carregar pela busca.
+6. Repetir com o mundo salvo e reaberto; verificar contagem de itens e ausência de duplicação.
+7. Confirmar o funcionamento tanto em singleplayer quanto em servidor dedicado.
+
+Próxima integração após os testes: **barris**, sem suporte planejado a shulker boxes.
 
 ## Compilação e testes necessários
 
