@@ -15,9 +15,9 @@ public final class CustomCategoryCommands {
                 .executes(ctx -> info(ctx.getSource()))
                 .then(Commands.literal("list").executes(ctx -> info(ctx.getSource())))
                 .then(Commands.literal("clear").executes(ctx -> invoke(ctx.getSource(), () -> ServerCategorySettings.clearAll(),
-                        "Categorias removidas deste mundo. Use /scg categories restore para recuperar as 43 originais.")))
+                        "Categorias removidas deste mundo. Use /scg categories restore para recuperar as 42 originais.")))
                 .then(Commands.literal("restore").executes(ctx -> invoke(ctx.getSource(), () -> ServerCategorySettings.restoreDefaults(),
-                        "43 categorias originais restauradas; categorias personalizadas foram apagadas.")))
+                        "42 categorias originais restauradas; categorias personalizadas foram apagadas.")))
                 .then(Commands.literal("create")
                         .then(Commands.argument("name", StringArgumentType.word()).executes(ctx -> {
                             String name = StringArgumentType.getString(ctx, "name");
@@ -47,7 +47,7 @@ public final class CustomCategoryCommands {
     private static int info(CommandSourceStack source) {
         String list = String.join(", ", ServerCategorySettings.customCategories().keySet());
         source.sendSuccess(() -> Component.literal("Categorias vanilla: "
-                + (ServerCategorySettings.defaultsEnabled() ? "43 ativas" : "desativadas")
+                + (ServerCategorySettings.defaultsEnabled() ? "42 ativas" : "desativadas")
                 + " | Personalizadas: " + (list.isEmpty() ? "nenhuma" : list)), false);
         return 1;
     }
