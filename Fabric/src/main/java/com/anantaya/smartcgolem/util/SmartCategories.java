@@ -2,6 +2,7 @@
 package com.anantaya.smartcgolem.util;
 
 import net.minecraft.core.registries.BuiltInRegistries;
+import com.anantaya.smartcgolem.ServerCategorySettings;
 import net.minecraft.world.item.ItemStack;
 
 public final class SmartCategories {
@@ -10,7 +11,7 @@ public final class SmartCategories {
     /** Single source of truth; do not classify by heuristic tags/components. */
     public static String category(ItemStack stack) {
         if (stack.isEmpty()) return null;
-        return CategoryPolicy.classify(
+        return ServerCategorySettings.classify(
                 BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
     }
 }

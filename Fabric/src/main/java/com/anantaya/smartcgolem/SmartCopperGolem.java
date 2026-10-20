@@ -8,6 +8,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.minecraft.world.entity.animal.golem.CopperGolem;
 import net.minecraft.commands.Commands;
+import com.anantaya.smartcgolem.util.StorageFrameIndex;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.minecraft.server.permissions.Permissions;
 import net.minecraft.network.chat.Component;
@@ -25,8 +26,20 @@ public class SmartCopperGolem implements ModInitializer {
                 CategoryPolicy.all().size(), CategoryPolicy.categoryKeys().size());
 
         // The setting lives with the save, not with any individual client.
-        ServerLifecycleEvents.SERVER_STARTED.register(server -> { ServerSortSettings.load(server); ServerWorkZoneSettings.load(server); });
-        ServerLifecycleEvents.SERVER_STOPPED.register(server -> { ServerSortSettings.reset(); ServerWorkZoneSettings.reset(); });
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            ServerSortSettings.load(server);
+            ServerWorkZoneSettings.load(server);
+            ServerCategorySettings.load(server);
+            ServerCarrySettings.load(server);
+            StorageFrameIndex.clear();
+        });
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            ServerSortSettings.reset();
+            ServerWorkZoneSettings.reset();
+            ServerCategorySettings.unload();
+            ServerCarrySettings.unload();
+            StorageFrameIndex.clear();
+        });
 
         // Capture each new golem's home as soon as it enters a server level.
         // Previously seen golems keep their persisted UUID anchors.
@@ -42,6 +55,12 @@ public class SmartCopperGolem implements ModInitializer {
                     .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_MODERATOR))
                     .then(languageNode())
                     .then(FrameRotationCommands.node())
+                    .then(CustomCategoryCommands.node())
+                    .then(Commands.literal("carry")
+                            .executes(ctx -> showCarry(ctx.getSource()))
+                            .then(Commands.literal("16").executes(ctx -> setCarry(ctx.getSource(), 16)))
+                            .then(Commands.literal("32").executes(ctx -> setCarry(ctx.getSource(), 32)))
+                            .then(Commands.literal("64").executes(ctx -> setCarry(ctx.getSource(), 64))))
                     .then(Commands.literal("radius")
                         .executes(ctx -> showRadius(ctx.getSource()))
                         .then(Commands.argument("width", IntegerArgumentType.integer(16,1000))
@@ -69,6 +88,23 @@ public class SmartCopperGolem implements ModInitializer {
                 .executes(ctx -> showLanguage(ctx.getSource()))
                 .then(Commands.literal("pt").executes(ctx -> changeLanguage(ctx.getSource(), SortLanguage.Mode.PT)))
                 .then(Commands.literal("en").executes(ctx -> changeLanguage(ctx.getSource(), SortLanguage.Mode.EN)));
+    }
+
+    private static int showCarry(net.minecraft.commands.CommandSourceStack source) {
+        source.sendSuccess(() -> Component.literal("Capacidade atual de transporte: "
+                + ServerCarrySettings.maximum() + " itens por pilha (limite de cada item respeitado)."), false);
+        return 1;
+    }
+
+    private static int setCarry(net.minecraft.commands.CommandSourceStack source, int amount) {
+        try {
+            ServerCarrySettings.change(amount);
+            source.sendSuccess(() -> Component.literal("Capacidade máxima por transporte definida para " + amount + "."), true);
+            return 1;
+        } catch (java.io.IOException | IllegalArgumentException e) {
+            source.sendFailure(Component.literal("Falha ao alterar capacidade: " + e.getMessage()));
+            return 0;
+        }
     }
 
     private static int showRadius(net.minecraft.commands.CommandSourceStack src) {

@@ -45,6 +45,7 @@ public final class FrameRotationCommands {
             frame.setRotation(rotation);
             changed++;
         }
+        com.anantaya.smartcgolem.util.StorageFrameIndex.invalidate(level);
         final int updated = changed, unchanged = already, skipped = protectedStick;
         String degree = rotation == 0 ? "0° (categoria)" : "45° (item exato)";
         source.sendSuccess(() -> Component.literal(
