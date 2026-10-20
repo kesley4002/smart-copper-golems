@@ -19,10 +19,9 @@ aquatic	Corais e itens aquáticos	37	37
 agriculture	Agricultura: sementes e colheitas	41	15
 food_raw_meat	Carnes e peixes crus	42,43	9
 food_cooked_meat	Carnes e peixes cozidos	42,43	7
-food_raw_vegetables	Vegetais crus	42,43	5
-food_cooked_vegetables	Vegetais preparados	42,43	5
+food_raw_vegetables	Vegetais, batatas e algas	42,43	7
 food_fruit	Frutas	42,43	7
-food_meals	Refeições, doces e especiais	42,43	6
+food_meals	Refeições, sopas e doces	42,43	9
 mob_drops	Drops de mobs e tesouros	44,45,61	49
 redstone	Redstone e circuitos	46	26
 copper_machines	Maquinaria e acessórios de cobre	47	73
