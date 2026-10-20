@@ -4,11 +4,20 @@ import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.junit.Test;
+import org.junit.BeforeClass;
+import net.minecraft.SharedConstants;
+import net.minecraft.server.Bootstrap;
 
 import static org.junit.Assert.*;
 
 /** Tests ordering, stacking, counts, and idempotency of destination containers. */
 public final class ContainerAlphabetizerTest {
+    @BeforeClass
+    public static void setUpMinecraftRegistries() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+    }
+
     @Test
     public void sortsByEnglishIdAndConsolidatesCompatibleStacks() {
         SimpleContainer barrel = new SimpleContainer(27);
