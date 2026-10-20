@@ -1131,7 +1131,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     }
 
     private boolean isNight(ServerLevel level) {
-        long t = Math.floorMod(level.getDayTime(), 24000L);
+        long t = Math.floorMod(level.getLevelData().getDayTime(), 24000L);
         return t >= 13000L && t < 23000L;
     }
 
