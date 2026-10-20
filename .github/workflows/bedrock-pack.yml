@@ -1,0 +1,23 @@
+name: Build Bedrock visuals
+on:
+  push:
+    branches: [feature/geyser-bedrock-bridge-0.9.8]
+    paths:
+      - 'BedrockPack/**'
+      - 'tools/build_bedrock_pack.py'
+      - '.github/workflows/bedrock-pack.yml'
+  workflow_dispatch:
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Validate and package Bedrock resource pack
+        run: python tools/build_bedrock_pack.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: SmartCopperGolems_Bedrock_0.9.8
+          path: build/SmartCopperGolems_Bedrock_0.9.8.mcpack
