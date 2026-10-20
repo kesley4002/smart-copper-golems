@@ -31,7 +31,8 @@ public final class ContainerAlphabetizer {
         }
 
         List<AlphabeticPacking.Entry<ItemStack>> ordered =
-                AlphabeticPacking.compactAndSort(input, ItemStack::isSameItemSameComponents);
+                AlphabeticPacking.compactAndSort(input, ItemStack::isSameItemSameComponents,
+                        SortLanguage.comparator());
         if (ordered.size() > slots) {
             throw new IllegalStateException("Packed items exceed inventory slots");
         }
