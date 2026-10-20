@@ -3,7 +3,7 @@
   "id": "smart-copper-golem",
   "version": "${version}",
   "name": "Smart Copper Golems Extended",
-  "description": "Server-side category sorting prototype based on Smart Copper Golems by GameMech007.",
+  "description": "Copper golem category sorting on dedicated servers and singleplayer integrated servers; based on Smart Copper Golems by GameMech007.",
   "authors": [
     "GameMech007!"
   ],
@@ -14,7 +14,7 @@
   },
   "license": "Apache-2.0",
   "icon": "assets/smart-copper-golem/icon.png",
-  "environment": "server",
+  "environment": "*",
   "entrypoints": {
     "main": [
       "com.anantaya.smartcgolem.SmartCopperGolem"
