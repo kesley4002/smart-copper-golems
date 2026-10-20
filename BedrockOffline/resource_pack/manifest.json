@@ -1,0 +1,29 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Smart Copper Golems — Offline (Visual)",
+    "description": "Copper golem vanilla oxidations and custom animated legs.",
+    "uuid": "37d65cec-12ca-4cbe-8f44-283ecf8cb902",
+    "version": [
+      0,
+      1,
+      0
+    ],
+    "min_engine_version": [
+      1,
+      26,
+      0
+    ]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "4f7f9b8e-df8c-47c1-b7a1-75baa7ed1084",
+      "version": [
+        0,
+        1,
+        0
+      ]
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Smart Copper Golems — Offline (Behavior)",
+    "description": "Survival-compatible sorting prototype with Script API. No Fabric or Geyser.",
+    "uuid": "4d6731be-0ead-49b9-a233-70bb3aa7c725",
+    "version": [
+      0,
+      1,
+      0
+    ],
+    "min_engine_version": [
+      1,
+      26,
+      0
+    ]
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "bc626249-1e50-4758-8bcb-6aef2cd5d9b6",
+      "version": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "script",
+      "language": "javascript",
+      "entry": "scripts/main.js",
+      "uuid": "786aecb0-62a4-4d11-9b9b-7f4d36b44f07",
+      "version": [
+        0,
+        1,
+        0
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "uuid": "37d65cec-12ca-4cbe-8f44-283ecf8cb902",
+      "version": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.2.0"
+    }
+  ]
+}
