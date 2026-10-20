@@ -84,7 +84,7 @@ public final class ItemFrameHelper {
                 hasCategory = true;
                 selectedCategory = category;
                 representative = sample;
-            } else if (!held.isEmpty() && ItemStack.isSameItemSameComponents(sample, held)) {
+            } else if (frame.getRotation() == 1 && !held.isEmpty() && ItemStack.isSameItemSameComponents(sample, held)) {
                 exactMatch = true;
                 exactItem = sample;
             }
