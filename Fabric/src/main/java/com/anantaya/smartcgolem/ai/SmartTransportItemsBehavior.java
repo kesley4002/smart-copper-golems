@@ -49,6 +49,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private long stretchStageStartTick = -1L;
     private boolean stretchActive = false;
     private BlockPos stretchedChestTarget;
+    private int stretchMaxProgress = 1000;
 
     private enum TaskState {
         IDLE,
@@ -72,7 +73,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
     private static final long LOCK_STALE_TICKS = 600;
 
-    private static final int MAGIC_DEPOSIT_STUCK_TICKS = 100;
+    // Short fallback for non-elevated unreachable chests. Elevated chests use
+    // immediate, distance-gated animation, never a fixed 100-tick delay.
+    private static final int MAGIC_DEPOSIT_STUCK_TICKS = 20;
     // Keep the remote lid visibly open long enough for a client animation.
     private static final int REMOTE_LID_OPEN_TICKS = 10;
     private static final int REMOTE_CHEST_LID_OPEN_TICKS = 24;
@@ -318,6 +321,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             case INTERACT_SOURCE -> interactWithSource(level, mob, gameTime);
 
             case WALK_TO_DESTINATION -> {
+                // Start stretching as soon as we are physically near an elevated
+                // filtered destination, even if navigation considers it arrived.
+                if (startStretchNearElevatedChest(level, mob, gameTime)) return;
                 walkToTarget(mob, gameTime);
 
                 if (tryMagicDepositIfStuck(level, mob, gameTime)) {
@@ -345,7 +351,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 }
 
                 if (isChestLocked(level.dimension(), currentTarget, gameTime) && !isChestBusy(chest)) {
-                    switchState(mob, TaskState.INTERACT_DESTINATION, currentTarget, gameTime);
+                    if (!startStretchNearElevatedChest(level, mob, gameTime))
+                        switchState(mob, TaskState.INTERACT_DESTINATION, currentTarget, gameTime);
                 }
             }
 
@@ -358,11 +365,11 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 long elapsed = gameTime - stretchStageStartTick;
                 if (mob instanceof CopperGolem copper && elapsed % 20 == 0)
                     com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
-                            com.anantaya.smartcgolem.animation.StretchManager.GROW, (int)Math.min(elapsed,101L));
+                            com.anantaya.smartcgolem.animation.StretchManager.GROW, (int)Math.min(elapsed,101L), stretchMaxProgress);
                 if (elapsed >= com.anantaya.smartcgolem.animation.StretchManager.DURATION) {
                     if (mob instanceof CopperGolem copper)
                         com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
-                                com.anantaya.smartcgolem.animation.StretchManager.HOLD, 0);
+                                com.anantaya.smartcgolem.animation.StretchManager.HOLD, 0, stretchMaxProgress);
                     // Interaction only after the visual growth has completed.
                     if (!magicDepositIntoMatchedChest(level, mob, gameTime)) {
                         startShrink(level, mob, gameTime);
@@ -377,7 +384,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 long elapsed = gameTime - stretchStageStartTick;
                 if (mob instanceof CopperGolem copper && elapsed % 20 == 0)
                     com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
-                            com.anantaya.smartcgolem.animation.StretchManager.SHRINK, (int)Math.min(elapsed,101L));
+                            com.anantaya.smartcgolem.animation.StretchManager.SHRINK, (int)Math.min(elapsed,101L), stretchMaxProgress);
                 if (elapsed >= com.anantaya.smartcgolem.animation.StretchManager.DURATION) {
                     if (mob instanceof CopperGolem copper)
                         com.anantaya.smartcgolem.animation.StretchManager.stop(level, copper);
@@ -1315,6 +1322,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         }
         stretchActive = false;
         stretchedChestTarget = null;
+        stretchMaxProgress = 1000;
 
         ticksAtTarget = 0;
         actionDone = false;
@@ -1418,18 +1426,41 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 + " distanceSqr=" + currentDistance
                 + " bestDistanceSqr=" + closestDistanceToWalkTargetSqr);
 
-        if (mob instanceof CopperGolem copper
-                && currentTarget != null && currentTarget.getY() > mob.blockPosition().getY()+1) {
-            stretchActive = true;
-            stretchedChestTarget = currentTarget.immutable();
-            stretchStageStartTick = gameTime;
-            taskState = TaskState.STRETCH_GROW;
-            mob.getNavigation().stop();
-            com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
-                    com.anantaya.smartcgolem.animation.StretchManager.GROW, 0);
-            return true;
-        }
+        if (startStretchNearElevatedChest(level, mob, gameTime)) return true;
         return magicDepositIntoMatchedChest(level, mob, gameTime);
+    }
+
+    /**
+     * One Blockbench animation for 2-5-high chests. Animation progress is
+     * clamped to the height difference instead of always reaching five blocks.
+     * Only start remotely when next to the chest horizontally, preventing
+     * teleporting items from across the room.
+     */
+    private boolean startStretchNearElevatedChest(ServerLevel level, PathfinderMob mob, long gameTime) {
+        if (!(mob instanceof CopperGolem copper) || stretchActive || currentTarget == null
+                || !currentDestinationIsFramedMatch || mob.getMainHandItem().isEmpty()) return false;
+        int height = currentTarget.getY() - mob.blockPosition().getY();
+        if (height < 2 || height > 5) return false;
+        double dx = mob.getX() - (currentTarget.getX() + 0.5);
+        double dz = mob.getZ() - (currentTarget.getZ() + 0.5);
+        if (dx*dx + dz*dz > 9.0) return false;
+        // Validate frame and destination before commencing long animation.
+        if (getDestinationBlockEntity(level, currentTarget) == null
+                || ItemFrameHelper.hasSourceMarker(level, currentTarget)) return false;
+        FrameFilterResult filter = getFrameFilterResult(level, currentTarget, mob.getMainHandItem());
+        if (!filter.hasFrame() || !filter.matchesHeld()) return false;
+
+        // The animation's max displacement is authored for a chest at ~5 blocks;
+        // 2/3/4-block chests use 25/50/75% of its authored timeline.
+        stretchMaxProgress = Math.max(250, Math.min(1000, (height - 1) * 250));
+        stretchActive = true;
+        stretchedChestTarget = currentTarget.immutable();
+        stretchStageStartTick = gameTime;
+        taskState = TaskState.STRETCH_GROW;
+        mob.getNavigation().stop();
+        com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
+                com.anantaya.smartcgolem.animation.StretchManager.GROW, 0, stretchMaxProgress);
+        return true;
     }
 
     private void startShrink(ServerLevel level, PathfinderMob mob, long gameTime) {
@@ -1439,7 +1470,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         mob.getNavigation().stop();
         if (mob instanceof CopperGolem copper)
             com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
-                    com.anantaya.smartcgolem.animation.StretchManager.SHRINK, 0);
+                    com.anantaya.smartcgolem.animation.StretchManager.SHRINK, 0, stretchMaxProgress);
     }
 
     private boolean magicDepositIntoMatchedChest(ServerLevel level, PathfinderMob mob, long gameTime) {
