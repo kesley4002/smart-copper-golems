@@ -21,7 +21,7 @@ public final class CategoryPolicyTest {
     public void allSurvivalItemsHaveExactlyOneKnownCategory() {
         Map<String, String> catalog = CategoryPolicy.all();
         assertEquals("Missing or extra catalog IDs", 1413, catalog.size());
-        assertEquals("Expected 42 categories", 43, CategoryPolicy.categoryKeys().size());
+        assertEquals("Expected 42 categories", 42, CategoryPolicy.categoryKeys().size());
         assertEquals(42, new HashSet<>(catalog.values()).size());
         assertTrue(catalog.keySet().stream().allMatch(id -> id.startsWith("minecraft:")));
         assertTrue(catalog.values().stream().allMatch(c -> CategoryPolicy.categoryKeys().contains(c)));
@@ -105,6 +105,23 @@ public final class CategoryPolicyTest {
         assertEquals("redstone", CategoryPolicy.classify("minecraft:redstone_torch"));
         assertEquals("vegetation", CategoryPolicy.classify("minecraft:glow_lichen"));
         assertEquals("stone_construction", CategoryPolicy.classify("minecraft:cut_copper_stairs"));
+    }
+
+    @Test
+    public void woodenDoorsAndAccessoriesAreNowOneCategory() {
+        String group = "wood_crafting";
+        assertEquals(group, CategoryPolicy.classify("minecraft:oak_door"));
+        assertEquals(group, CategoryPolicy.classify("minecraft:oak_fence"));
+        assertEquals(group, CategoryPolicy.classify("minecraft:oak_fence_gate"));
+        assertEquals(group, CategoryPolicy.classify("minecraft:oak_trapdoor"));
+        assertEquals(group, CategoryPolicy.classify("minecraft:oak_sign"));
+        assertEquals(group, CategoryPolicy.classify("minecraft:oak_hanging_sign"));
+        assertEquals(group, CategoryPolicy.classify("minecraft:oak_button"));
+        assertEquals(group, CategoryPolicy.classify("minecraft:oak_pressure_plate"));
+        assertEquals(group, CategoryPolicy.classify("minecraft:oak_shelf"));
+        assertEquals(group, CategoryPolicy.classify("minecraft:stick"));
+        assertFalse(CategoryPolicy.categoryKeys().contains("wood_accessories"));
+        assertEquals("wood_shapes", CategoryPolicy.classify("minecraft:oak_stairs"));
     }
 
     @Test
