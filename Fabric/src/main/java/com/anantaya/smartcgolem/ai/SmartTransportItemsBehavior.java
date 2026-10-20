@@ -51,7 +51,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
     private static final long LOCK_STALE_TICKS = 600;
 
-    private static final int MAGIC_DEPOSIT_STUCK_TICKS = 100;
+    private static final int ROUTE_STUCK_TICKS = 140;
+    private BlockPos lastMovementPos = null;
+    private BlockPos temporarilyBlockedDestination = null;
+    private long blockedUntilTick = 0L;
 
     private boolean currentDestinationIsFramedMatch = false;
     private boolean currentDestinationHadReachablePath = true;
@@ -82,7 +85,6 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private int ticksAtTarget = 0;
     private long nextSearchTick = 0;
 
-    private static final int ARRIVAL_DISTANCE_SQUARED = 4;
     private static final int SEARCH_COOLDOWN_TICKS = 20;
     private static final Map<String, Long> NOTICE_COOLDOWNS = new HashMap<>();
     private static final long NOTICE_INTERVAL_TICKS = 1200;
@@ -293,7 +295,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             case WALK_TO_DESTINATION -> {
                 walkToTarget(mob, gameTime);
 
-                if (tryMagicDepositIfStuck(level, mob, gameTime)) {
+                if (retryRouteIfStuck(level, mob, gameTime)) {
                     return;
                 }
 
@@ -352,7 +354,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private void walkToTarget(PathfinderMob mob, long gameTime) {
 
         if (currentWalkTarget == null) {
-            switchState(mob, TaskState.IDLE, null, gameTime);
+            if (!mob.getMainHandItem().isEmpty() && returnToSourceChest != null
+                    && taskState != TaskState.RETURN_TO_SOURCE) {
+                switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);
+            } else {
+                switchState(mob, TaskState.IDLE, null, gameTime);
+            }
             return;
         }
 
@@ -365,9 +372,13 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     }
 
     private boolean hasArrived(PathfinderMob mob) {
-        return currentWalkTarget != null
-                && mob.blockPosition().distSqr(currentWalkTarget)
-                <= ARRIVAL_DISTANCE_SQUARED;
+        if (currentWalkTarget == null) return false;
+        double dx = mob.getX() - (currentWalkTarget.getX() + 0.5D);
+        double dz = mob.getZ() - (currentWalkTarget.getZ() + 0.5D);
+        // The previous squared block distance (<=4) treated an overhead roof
+        // as "arrived" even when a solid floor separated the golem and chest.
+        return Math.abs(mob.getY() - currentWalkTarget.getY()) < 0.8D
+                && dx * dx + dz * dz < 1.21D;
     }
 
     /**
@@ -379,62 +390,44 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         return mob.blockPosition().distSqr(pos);
     }
 
+    /**
+     * Only use a walkable place beside a chest, never the chest itself or
+     * a tile on the roof above it. A path must really reach that position.
+     * This lets vanilla navigation discover a route via stairs or corridors.
+     */
+    private record ChestApproach(BlockPos target, double cost) {}
+
+    private ChestApproach findApproach(PathfinderMob mob, BlockPos chestPos) {
+        ChestApproach best = null;
+        for (int yOffset : new int[]{0, -1}) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (dx == 0 && dz == 0) continue;
+                    BlockPos standing = chestPos.offset(dx, yOffset, dz);
+                    if (!mob.level().getBlockState(standing).getCollisionShape(mob.level(), standing).isEmpty()
+                            || !mob.level().getBlockState(standing.above()).getCollisionShape(mob.level(), standing.above()).isEmpty()) {
+                        continue;
+                    }
+                    Path path = mob.getNavigation().createPath(standing, 0);
+                    if (path == null || !path.canReach()) continue;
+                    double cost = path.getNodeCount();
+                    if (best == null || cost < best.cost()) {
+                        best = new ChestApproach(standing.immutable(), cost);
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
     private double getPathCost(PathfinderMob mob, BlockPos chestPos) {
-
-        double bestCost = Double.MAX_VALUE;
-
-        for (BlockPos nearby : BlockPos.betweenClosed(
-                chestPos.offset(-1, 0, -1),
-                chestPos.offset(1, 1, 1))) {
-
-            Path path = mob.getNavigation().createPath(nearby, 1);
-
-            if (path == null || !path.canReach()) {
-                continue;
-            }
-
-            double cost = path.getNodeCount();
-
-            if (cost < bestCost) {
-                bestCost = cost;
-            }
-        }
-
-        if (bestCost == Double.MAX_VALUE) {
-            System.out.println("[SMART-GOLEM PATH-SKIP] Cannot path near " + chestPos);
-        }
-
-        return bestCost;
+        ChestApproach approach = findApproach(mob, chestPos);
+        return approach == null ? Double.MAX_VALUE : approach.cost();
     }
 
     private BlockPos findBestWalkTargetForChest(PathfinderMob mob, BlockPos chestPos) {
-
-        BlockPos best = chestPos;
-        double bestCost = Double.MAX_VALUE;
-
-        for (BlockPos nearby : BlockPos.betweenClosed(
-                chestPos.offset(-1, 0, -1),
-                chestPos.offset(1, 1, 1))) {
-
-            Path path = mob.getNavigation().createPath(nearby, 1);
-
-            if (path == null || !path.canReach()) {
-                continue;
-            }
-
-            double cost = path.getNodeCount();
-
-            if (returnToSourceChest != null) {
-                cost += Math.abs(nearby.getY() - returnToSourceChest.getY()) * 200;
-            }
-
-            if (cost < bestCost) {
-                bestCost = cost;
-                best = nearby.immutable();
-            }
-        }
-
-        return best;
+        ChestApproach approach = findApproach(mob, chestPos);
+        return approach == null ? null : approach.target();
     }
 
     private void interactWithSource(ServerLevel level, PathfinderMob mob, long gameTime) {
@@ -783,6 +776,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         }
 
+        long gameTimeForBlockedChest = level.getGameTime() < blockedUntilTick ? level.getGameTime() : -1L;
         java.util.List<BlockPos> candidates = collectCandidates(level, mob, destinationBlockType);
 
 
@@ -820,17 +814,17 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 continue;
             }
 
-            double pathCost = getPathCost(mob, pos);
-            boolean reachable = pathCost != Double.MAX_VALUE;
-
-            if (!reachable) {
-                System.out.println("[SMART-GOLEM MATCHED-NO-PATH] Matched framed chest is unreachable. "
-                        + "Will allow magic deposit after stuck timeout. chest=" + pos);
-            } else {
-                System.out.println("[SMART-GOLEM MATCHED-PATH] Matched framed chest is reachable. chest=" + pos);
+            // A framed chest can only be selected with a complete walking path.
+            // Never route an item into a chest through a floor or ceiling.
+            if (gameTimeForBlockedChest != -1L && pos.equals(temporarilyBlockedDestination)) {
+                continue;
             }
-
-            markDestinationSelection(true, reachable);
+            double pathCost = getPathCost(mob, pos);
+            if (pathCost == Double.MAX_VALUE) {
+                System.out.println("[SMART-GOLEM NO-WALKING-PATH] Skip unreachable chest=" + pos);
+                continue;
+            }
+            markDestinationSelection(true, true);
             return pos;
         }
 
@@ -1170,6 +1164,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
     private void resetStuckTracking(PathfinderMob mob, long gameTime) {
         this.stuckStartedAt = gameTime;
+        this.lastMovementPos = mob.blockPosition().immutable();
 
         if (currentWalkTarget == null) {
             this.closestDistanceToWalkTargetSqr = Double.MAX_VALUE;
@@ -1178,197 +1173,32 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         }
     }
 
-    private boolean tryMagicDepositIfStuck(ServerLevel level, PathfinderMob mob, long gameTime) {
-
-        if (!currentDestinationIsFramedMatch) {
-            return false;
-        }
-
-        if (currentTarget == null || currentWalkTarget == null) {
-            return false;
-        }
-
-        if (mob.getMainHandItem().isEmpty()) {
-            return false;
-        }
-
-        if (hasArrived(mob)) {
-            resetStuckTracking(mob, gameTime);
-            return false;
-        }
-
-        double currentDistance = distanceToCurrentWalkTargetSqr(mob);
-
-        if (closestDistanceToWalkTargetSqr == Double.MAX_VALUE) {
-            closestDistanceToWalkTargetSqr = currentDistance;
+    /**
+     * A stationary golem must recalculate an alternate physical route.
+     * No teleport deposits: if routing fails, it takes its items back.
+     */
+    private boolean retryRouteIfStuck(ServerLevel level, PathfinderMob mob, long gameTime) {
+        if (currentTarget == null || currentWalkTarget == null || hasArrived(mob)) return false;
+        BlockPos here = mob.blockPosition();
+        if (lastMovementPos == null || !lastMovementPos.equals(here)) {
+            lastMovementPos = here.immutable();
             stuckStartedAt = gameTime;
             return false;
         }
+        if (gameTime - stuckStartedAt < ROUTE_STUCK_TICKS) return false;
 
-
-        if (currentDistance < closestDistanceToWalkTargetSqr - 0.25D) {
-            closestDistanceToWalkTargetSqr = currentDistance;
-            stuckStartedAt = gameTime;
-            return false;
-        }
-
-        if (stuckStartedAt < 0L) {
-            stuckStartedAt = gameTime;
-            return false;
-        }
-
-        if (gameTime - stuckStartedAt < MAGIC_DEPOSIT_STUCK_TICKS) {
-            return false;
-        }
-
-        System.out.println("[SMART-GOLEM MAGIC-DEPOSIT-TRY] target=" + currentTarget
-                + " holding=" + mob.getMainHandItem()
-                + " reachableAtSearch=" + currentDestinationHadReachablePath
-                + " distanceSqr=" + currentDistance
-                + " bestDistanceSqr=" + closestDistanceToWalkTargetSqr);
-
-        return magicDepositIntoMatchedChest(level, mob, gameTime);
-    }
-
-    private boolean magicDepositIntoMatchedChest(ServerLevel level, PathfinderMob mob, long gameTime) {
-
-        BlockPos depositTarget = currentTarget;
-
-        BlockEntity blockEntity = level.getBlockEntity(depositTarget);
-
-        if (!(blockEntity instanceof ChestBlockEntity chest)) {
-            System.out.println("[SMART-GOLEM MAGIC-DEPOSIT-CANCEL] Target is not chest: " + depositTarget);
-            markDestinationSelection(false, true);
-            switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);
-            return true;
-        }
-
-        if (isChestBusy(chest)) {
-            System.out.println("[SMART-GOLEM MAGIC-DEPOSIT-WAIT] Chest busy: " + depositTarget);
-            resetStuckTracking(mob, gameTime);
-            return false;
-        }
-
-        ItemStack heldBefore = mob.getMainHandItem().copy();
-
-        if (heldBefore.isEmpty()) {
-            return false;
-        }
-
-        FrameFilterResult frameFilter = getFrameFilterResult(level, depositTarget, heldBefore);
-
-        if (!frameFilter.hasFrame() || !frameFilter.matchesHeld()) {
-
-            System.out.println("[SMART-GOLEM MAGIC-DEPOSIT-CANCEL] No matching frame anymore. chest="
-                    + depositTarget
-                    + " matchedFrameItem=" + frameFilter.matchedFrameItem()
-                    + " held=" + heldBefore);
-
-            markDestinationSelection(false, true);
-
-            BlockPos alternateDestination = findDestinationChest(level, mob);
-
-            if (alternateDestination != null && !alternateDestination.equals(depositTarget)) {
-                switchState(mob, TaskState.WALK_TO_DESTINATION, alternateDestination, gameTime);
-            } else {
-                switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);
-            }
-
-            return true;
-        }
-
-        Container targetContainer = getActualContainer(level, depositTarget, chest);
-
-        if (hasSpaceFor(targetContainer, heldBefore)) {
-            System.out.println("[SMART-GOLEM MAGIC-DEPOSIT-CANCEL] Matched chest full: " + depositTarget);
-
-            markDestinationSelection(false, true);
-
-            BlockPos alternateDestination = findDestinationChest(level, mob);
-
-            if (alternateDestination != null && !alternateDestination.equals(depositTarget)) {
-                switchState(mob, TaskState.WALK_TO_DESTINATION, alternateDestination, gameTime);
-            } else {
-                switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);
-            }
-
-            return true;
-        }
-
-        if (tryLockChest(depositTarget, gameTime)) {
-            System.out.println("[SMART-GOLEM MAGIC-DEPOSIT-WAIT] Chest locked by another golem: " + depositTarget);
-            resetStuckTracking(mob, gameTime);
-            return false;
-        }
-
-        mob.getNavigation().stop();
-
-        ItemStack remaining;
-
-        try {
-            remaining = insertIntoChest(level, depositTarget, targetContainer, heldBefore);
-        } finally {
-            unlockChest();
-        }
-
-        mob.setItemInHand(InteractionHand.MAIN_HAND, remaining);
-
-        chest.setChanged();
-        level.blockEntityChanged(depositTarget);
-
-        boolean movedItem = remaining.getCount() < heldBefore.getCount();
-
-        if (movedItem) {
-            spawnMagicDepositParticles(level, mob, depositTarget);
-
-            if (mob instanceof CopperGolem copperGolem) {
-                copperGolem.playSound(SoundEvents.COPPER_GOLEM_ITEM_DROP);
-                copperGolem.setState(CopperGolemState.DROPPING_ITEM);
-            }
-
-            System.out.println("[SMART-GOLEM MAGIC-DEPOSIT-SUCCESS] chest=" + depositTarget
-                    + " heldBefore=" + heldBefore
-                    + " remaining=" + remaining);
+        BlockPos failed = currentTarget;
+        temporarilyBlockedDestination = failed;
+        blockedUntilTick = gameTime + 1200L;
+        System.out.println("[SMART-GOLEM ROUTE-BLOCKED] No walking progress toward " + failed);
+        BlockPos alternate = findDestinationChest(level, mob);
+        if (alternate != null && !alternate.equals(failed)) {
+            switchState(mob, TaskState.WALK_TO_DESTINATION, alternate, gameTime);
         } else {
-            if (mob instanceof CopperGolem copperGolem) {
-                copperGolem.playSound(SoundEvents.COPPER_GOLEM_ITEM_NO_DROP);
-                copperGolem.setState(CopperGolemState.DROPPING_NO_ITEM);
-            }
-
-            System.out.println("[SMART-GOLEM MAGIC-DEPOSIT-FAILED] Nothing moved. chest=" + depositTarget);
+            BlockPos source = returnToSourceChest != null ? returnToSourceChest : lastPickupChest;
+            if (source != null) switchState(mob, TaskState.RETURN_TO_SOURCE, source, gameTime);
+            else switchState(mob, TaskState.IDLE, null, gameTime);
         }
-
-        markDestinationSelection(false, true);
-        resetStuckTracking(mob, gameTime);
-
-
-        if (!mob.getMainHandItem().isEmpty()) {
-
-            BlockPos alternateDestination = findDestinationChest(level, mob);
-
-            if (alternateDestination != null && !alternateDestination.equals(depositTarget)) {
-                switchState(mob, TaskState.WALK_TO_DESTINATION, alternateDestination, gameTime);
-                return true;
-            }
-        }
-
-        BlockPos sourceToReturn = returnToSourceChest != null
-                ? returnToSourceChest
-                : lastPickupChest;
-
-        if (sourceToReturn != null) {
-            returnToSourceChest = sourceToReturn;
-            switchState(mob, TaskState.RETURN_TO_SOURCE, sourceToReturn, gameTime);
-
-            System.out.println("[SMART-GOLEM MAGIC-RETURN-TO-SOURCE] returning to=" + sourceToReturn);
-        } else {
-            taskState = TaskState.IDLE;
-            currentTarget = null;
-            currentWalkTarget = null;
-
-            System.out.println("[SMART-GOLEM MAGIC-RETURN-FAILED] No saved source chest.");
-        }
-
         return true;
     }
 
