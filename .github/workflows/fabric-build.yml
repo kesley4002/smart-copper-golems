@@ -1,9 +1,9 @@
 name: Fabric prototype validation
 on:
   push:
-    branches: ['feature/smart-categories-26.2', 'feature/ai-optimization-26.2']
+    branches: ['feature/smart-categories-26.2', 'feature/ai-optimization-26.2', 'feature/barrel-support-26.2']
   pull_request:
-    branches: ['v-26.2', 'feature/smart-categories-26.2']
+    branches: ['v-26.2', 'feature/smart-categories-26.2', 'feature/ai-optimization-26.2']
   workflow_dispatch:
 permissions:
   contents: read

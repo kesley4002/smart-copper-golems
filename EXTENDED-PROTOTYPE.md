@@ -51,7 +51,7 @@ O empilhamento continua exigindo igualdade exata de item e componentes.
 
 ## Fora do escopo desta alteração inicial
 
-Barris ainda não são destinos. Caixas de shulker foram retiradas do planejamento por decisão do projeto; não serão integradas. A busca vertical existente NÃO prova
+Barris são destinos na Etapa 3 experimental, com os mesmos filtros dos baús; o golem abre/fecha pelo contador de aberturas vanilla, preservando o estado OPEN e o som de barril. O comportamento visual e sonoro ainda exige teste manual em jogo. Caixas de shulker permanecem fora do projeto. A busca vertical existente NÃO prova
 interação a quatro blocos: isso exige mudar pontos de aproximação e testar alcance.
 O depósito remoto preexistente foi preservado e precisa ser revisado nessa etapa.
 Os bloqueios estáticos do original foram corrigidos para incluir dimensão e dono da reserva; a melhoria foi compilada com sucesso, mas ainda requer testes com vários golems.
@@ -76,7 +76,29 @@ Testar antes de integrar barris (etapa 3):
 6. Repetir com o mundo salvo e reaberto; verificar contagem de itens e ausência de duplicação.
 7. Confirmar o funcionamento tanto em singleplayer quanto em servidor dedicado.
 
-Próxima integração após os testes: **barris**, sem suporte planejado a shulker boxes.
+Etapa 3 após validação da etapa 2: **barris** como destinos, sem caixas de shulker. A branch `feature/barrel-support-26.2` inclui também a otimização anterior. Os filtros 0° e 45° operam em barris; a origem permanece um baú de cobre.
+
+## Etapa 3 — Barris (experimental, Fabric 26.2)
+
+- Destinos: baú normal, baú-armadilha e **barril**. Origem: somente baú de cobre.
+- Moldura presa diretamente ao barril: 0° filtra um item exato; 45° usa a mesma categoria entre as seis já implementadas.
+- Barril tem 27 slots e não se combina; baús duplos mantêm a lógica atual.
+- As chamadas Java `startOpen(copperGolem)` e `stopOpen(copperGolem)` utilizam o mecanismo vanilla de ContainerUser para reproduzir BARREL_OPEN / BARREL_CLOSE e controlar o estado OPEN. Não alteramos OPEN por força nem tocamos sons artificiais. Baús continuam usando seus sons e animação anteriores.
+- O depósito remoto preexistente em destino inacessível pode ocorrer sem abertura física; não é prova de que a animação do barril falhou.
+- Não serão integradas caixas de shulker.
+
+### Teste manual recomendado
+
+1. Baú de cobre com 8 ferros, 8 carvões e 8 diamantes; um barril com diamante a 45° deve receber os três tipos.
+2. Barril com diamante a 0° deve aceitar somente diamantes.
+3. Testar as seis categorias em barris, com dois itens de cada.
+4. Ouvir abertura/fechamento e verificar textura do barril em OPEN e retorno ao estado fechado, também sem shaders.
+5. Confirmar que baús simples e duplos ainda abrem/fecham com sons.
+6. Testar barril cheio, parcialmente cheio, ausência de moldura, mudança da moldura durante trajeto e item de categoria errada.
+7. Testar barris apontando para cima, baixo e horizontalmente, com molduras em faces possíveis.
+8. Usar vários golems simultaneamente; contar itens antes/depois e verificar ausência de bloqueios.
+9. Abrir um barril como jogador enquanto um golem o procura; ele deve aguardar o inventário desocupado.
+10. Salvar e recarregar mundo; conferir itens e estado visual. Depois testar servidor Fabric com Geyser/Floodgate.
 
 ## Compilação e testes necessários
 

@@ -20,6 +20,9 @@ import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.block.entity.BarrelBlockEntity;
+import net.minecraft.world.level.block.entity.BaseContainerBlockEntity;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.level.pathfinder.Path;
@@ -296,9 +299,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     return;
                 }
 
-                BlockEntity blockEntity = level.getBlockEntity(currentTarget);
+                BaseContainerBlockEntity chest = getDestinationBlockEntity(level, currentTarget);
 
-                if (!(blockEntity instanceof ChestBlockEntity chest)) {
+                if (chest == null) {
                     switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);
                     return;
                 }
@@ -528,10 +531,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             return;
         }
 
-        BlockEntity blockEntity = level.getBlockEntity(currentTarget);
+        BaseContainerBlockEntity chest = getDestinationBlockEntity(level, currentTarget);
 
-        if (!(blockEntity instanceof ChestBlockEntity chest)) {
-            System.out.println("[SMART-GOLEM ERROR] Destination target is not ChestBlockEntity at " + currentTarget);
+        if (chest == null) {
+            System.out.println("[SMART-GOLEM ERROR] Destination target is not a supported chest/barrel at " + currentTarget);
             closeOpenedContainer();
             switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);
             return;
@@ -549,8 +552,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
             if (mob instanceof CopperGolem copperGolem) {
 
-                chest.startOpen(copperGolem);
+                // The vanilla opener counter produces BARREL_OPEN, OPEN=true
+                // and later BARREL_CLOSE when stopOpen is called.
                 copperGolem.setOpenedChestPos(currentTarget);
+                chest.startOpen(copperGolem);
 
                 if (!copperGolem.getMainHandItem().isEmpty()) {
                     copperGolem.setState(CopperGolemState.DROPPING_ITEM);
@@ -766,9 +771,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 continue;
             }
 
-            BlockEntity blockEntity = level.getBlockEntity(pos);
-
-            if (!(blockEntity instanceof ChestBlockEntity chest)) {
+            BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
+            if (chest == null) {
                 continue;
             }
 
@@ -818,9 +822,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 continue;
             }
 
-            BlockEntity blockEntity = level.getBlockEntity(pos);
-
-            if (!(blockEntity instanceof ChestBlockEntity chest)) {
+            BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
+            if (chest == null) {
                 continue;
             }
 
@@ -855,9 +858,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 continue;
             }
 
-            BlockEntity blockEntity = level.getBlockEntity(pos);
-
-            if (!(blockEntity instanceof ChestBlockEntity chest)) {
+            BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
+            if (chest == null) {
                 continue;
             }
 
@@ -894,6 +896,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         if (openedContainer != null && openedCopperGolem != null) {
 
             if (openedContainer.getEntitiesWithContainerOpen().contains(openedCopperGolem)) {
+                // Preserve vanilla animation and sound for both container types.
                 openedContainer.stopOpen(openedCopperGolem);
             }
 
@@ -1034,16 +1037,28 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         return remaining;
     }
 
-    private boolean isChestBusy(ChestBlockEntity chest) {
+    private boolean isChestBusy(BaseContainerBlockEntity chest) {
+        // Both vanilla chests and barrels expose their current ContainerUser openers.
         return !chest.getEntitiesWithContainerOpen().isEmpty();
+    }
+
+    /** Copper chests remain sources; shulker boxes are not destinations. */
+    private BaseContainerBlockEntity getDestinationBlockEntity(ServerLevel level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        BlockEntity entity = level.getBlockEntity(pos);
+        if ((state.is(Blocks.CHEST) || state.is(Blocks.TRAPPED_CHEST))
+                && entity instanceof ChestBlockEntity chest) return chest;
+        if (state.is(Blocks.BARREL) && entity instanceof BarrelBlockEntity barrel) return barrel;
+        return null;
     }
 
     private Container getActualContainer(
             ServerLevel level,
             BlockPos pos,
-            ChestBlockEntity chest
+            BaseContainerBlockEntity chest
     ) {
 
+        // A barrel is a single container; only chests can combine.
         Container targetContainer = chest;
 
         if (level.getBlockState(pos).getBlock() instanceof ChestBlock chestBlock) {
@@ -1217,10 +1232,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         BlockPos depositTarget = currentTarget;
 
-        BlockEntity blockEntity = level.getBlockEntity(depositTarget);
+        BaseContainerBlockEntity chest = getDestinationBlockEntity(level, depositTarget);
 
-        if (!(blockEntity instanceof ChestBlockEntity chest)) {
-            System.out.println("[SMART-GOLEM MAGIC-DEPOSIT-CANCEL] Target is not chest: " + depositTarget);
+        if (chest == null) {
+            System.out.println("[SMART-GOLEM MAGIC-DEPOSIT-CANCEL] Target is not a supported chest/barrel: " + depositTarget);
             markDestinationSelection(false, true);
             switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);
             return true;
