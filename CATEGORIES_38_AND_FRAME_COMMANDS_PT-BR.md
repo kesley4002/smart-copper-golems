@@ -17,7 +17,7 @@ Catálogo oficial preservado: **1413 IDs únicos**. A divisão anterior de 34 ca
 /scg set itemframes 45
 ```
 
-Atalho adicional: `/set itemframes 0` ou `/set itemframes 45`. São necessários poderes de OP/moderador, iguais a `/scg radius 500`.
+Atalhos adicionais: `/set item frames 0`, `/set item frames 45`, `/set itemframes 0` ou `/set itemframes 45`. São necessários poderes de OP/moderador, iguais a `/scg radius 500`.
 
 O comando altera apenas as molduras **com itens** presentes nas entidades **já carregadas da dimensão atual**, sem gerar chunks nem editar o mapa inteiro. Molduras contendo **graveto são sempre preservadas**, para proteger os baús/barris de origem. O operador recebe a contagem de molduras alteradas, já ajustadas e preservadas.
 
