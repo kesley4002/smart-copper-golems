@@ -938,10 +938,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (hasSpaceFor(actual, held)) continue;
             double pathCost = getPathCost(mob, pos);
             boolean reachable = pathCost != Double.MAX_VALUE;
-            // Beneath the golem: allow the navigator to find stairs/entrances
-            // over multiple ticks; never use an instantaneous remote deposit.
-            if (pos.getY() < mob.blockPosition().getY() - 2 && !reachable
-                    && mob.blockPosition().distSqr(pos) < 25) continue;
+            // Even when directly above a basement chest, keep it selected:
+            // the staircase detour logic needs the target to remain active.
+            // Remote depositing below solid floors is separately forbidden.
             markDestinationSelection(true, reachable);
             return pos;
         }
