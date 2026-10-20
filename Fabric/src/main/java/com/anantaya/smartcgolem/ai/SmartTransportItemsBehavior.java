@@ -518,8 +518,14 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 if (bestDestination != null) {
                     switchState(mob, TaskState.WALK_TO_DESTINATION, bestDestination, gameTime);
                 } else {
-                    System.out.println("[SMART-GOLEM NO-DESTINATION] No valid destination found after pickup.");
-                    switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);
+                    // Put the item straight back where it came from; never leave it
+                    // stranded in the golem hand when no category exists.
+                    ItemStack remaining = insertIntoChest(
+                            level, currentTarget, getActualContainer(level, currentTarget, chest),
+                            mob.getMainHandItem());
+                    mob.setItemInHand(InteractionHand.MAIN_HAND, remaining);
+                    System.out.println("[SMART-GOLEM NO-DESTINATION] Item returned to source: " + currentTarget);
+                    switchState(mob, TaskState.IDLE, null, gameTime);
                 }
 
                 return;
@@ -593,8 +599,15 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
                 Container targetContainer = getActualContainer(level, currentTarget, chest);
 
-                ItemStack remaining =
-                        insertIntoChest(level, currentTarget, targetContainer, heldBefore);
+                // Re-check at deposit time: frames may have changed while the golem walked.
+                FrameFilterResult liveFilter = getFrameFilterResult(level, currentTarget, heldBefore);
+                ItemStack remaining = heldBefore;
+                if (liveFilter.hasFrame() && liveFilter.matchesHeld()
+                        && !hasSpaceFor(targetContainer, heldBefore)) {
+                    remaining = insertIntoChest(level, currentTarget, targetContainer, heldBefore);
+                } else {
+                    System.out.println("[SMART-GOLEM DEPOSIT-BLOCKED] Filter missing, empty, mismatched or chest full: " + currentTarget);
+                }
 
                 mob.setItemInHand(InteractionHand.MAIN_HAND, remaining);
 
@@ -815,82 +828,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         }
 
 
-        System.out.println("[SMART-GOLEM FALLBACK-SEARCH] No matching framed chest for "
-                + held + ". Searching unfiltered destination chest.");
-
-        for (BlockPos pos : candidates) {
-
-            if (pos.equals(lastPickupChest)) {
-                continue;
-            }
-
-            BlockEntity blockEntity = level.getBlockEntity(pos);
-
-            if (!(blockEntity instanceof ChestBlockEntity chest)) {
-                continue;
-            }
-
-            FrameFilterResult frameFilter = getFrameFilterResult(level, pos, held);
-
-            if (frameFilter.hasFrame()) {
-                System.out.println("[SMART-GOLEM FALLBACK-SKIP] Chest is filtered: " + pos);
-                continue;
-            }
-
-            Container targetContainer = getActualContainer(level, pos, chest);
-
-            if (hasSpaceFor(targetContainer, held)) {
-                System.out.println("[SMART-GOLEM FULL-CHEST] Skipping fallback chest because full: " + pos);
-                continue;
-            }
-
-            double pathCost = getPathCost(mob, pos);
-
-            if (pathCost == Double.MAX_VALUE) {
-                continue;
-            }
-
-            System.out.println("[SMART-GOLEM FALLBACK-DEPOSIT] Selected unfiltered chest=" + pos);
-            markDestinationSelection(false, true);
-            return pos;
-        }
-
-        for (BlockPos pos : candidates) {
-
-            if (!pos.equals(lastPickupChest)) {
-                continue;
-            }
-
-            BlockEntity blockEntity = level.getBlockEntity(pos);
-
-            if (!(blockEntity instanceof ChestBlockEntity chest)) {
-                continue;
-            }
-
-            Container targetContainer = getActualContainer(level, pos, chest);
-
-            if (hasSpaceFor(targetContainer, held)) {
-                continue;
-            }
-
-            FrameFilterResult frameFilter = getFrameFilterResult(level, pos, held);
-
-            if (frameFilter.hasFrame() && !frameFilter.matchesHeld()) {
-                continue;
-            }
-
-            double pathCost = getPathCost(mob, pos);
-
-            if (pathCost == Double.MAX_VALUE) {
-                continue;
-            }
-
-            System.out.println("[SMART-GOLEM LAST-RESORT-DEPOSIT] Depositing back into source chest=" + pos);
-            markDestinationSelection(frameFilter.hasFrame(), true);
-            return pos;
-        }
-
-        System.out.println("[SMART-GOLEM NO-TARGET] No matching chest and no unfiltered fallback chest found for " + held);
+        // Strict routing: never deposit into an unframed or unmatched chest.
+        // A missing category leaves the item with its source, not in arbitrary storage.
+        System.out.println("[SMART-GOLEM NO-TARGET] No matching filtered chest found for " + held);
 
         return null;
     }
@@ -1148,13 +1088,13 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 }
             }
 
+            // Even an empty frame reserves this chest. It is never a fallback destination.
+            hasFrame = true;
             ItemStack frameItem = frame.getItem();
 
             if (frameItem.isEmpty()) {
                 continue;
             }
-
-            hasFrame = true;
 
             if (!held.isEmpty() && ItemStack.isSameItemSameComponents(frameItem, held)) {
                 return new FrameFilterResult(true, true, frameItem.copy());
