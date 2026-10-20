@@ -51,6 +51,22 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private BlockPos stretchedChestTarget;
     private int stretchMaxProgress = 1000;
 
+    /** Keep the body and head directed at the actual chest throughout the reach. */
+    private void faceStretchTarget(PathfinderMob mob) {
+        BlockPos chest = stretchedChestTarget;
+        if (chest == null) return;
+        double dx = chest.getX() + 0.5D - mob.getX();
+        double dz = chest.getZ() + 0.5D - mob.getZ();
+        double horizontal = dx * dx + dz * dz;
+        if (horizontal < 0.0001D) return;
+        float yaw = (float)(Math.toDegrees(Math.atan2(dz, dx)) - 90.0D);
+        mob.getNavigation().stop();
+        mob.setYRot(yaw);
+        mob.setYHeadRot(yaw);
+        mob.setYBodyRot(yaw);
+        mob.getLookControl().setLookAt(chest.getX() + 0.5D, chest.getY() + 0.5D, chest.getZ() + 0.5D, 360.0F, 360.0F);
+    }
+
     private enum TaskState {
         IDLE,
         WALK_TO_SOURCE,
@@ -359,13 +375,11 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             case INTERACT_DESTINATION -> interactWithDestination(level, mob, gameTime);
 
             case STRETCH_GROW -> {
-                mob.getNavigation().stop();
-                if (currentTarget != null) mob.getLookControl().setLookAt(
-                        currentTarget.getX()+.5, currentTarget.getY()+.5, currentTarget.getZ()+.5);
+                faceStretchTarget(mob);
                 long elapsed = gameTime - stretchStageStartTick;
                 if (mob instanceof CopperGolem copper && elapsed % 20 == 0)
                     com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
-                            com.anantaya.smartcgolem.animation.StretchManager.GROW, (int)Math.min(elapsed,101L), stretchMaxProgress);
+                            com.anantaya.smartcgolem.animation.StretchManager.GROW, (int)Math.min(elapsed,com.anantaya.smartcgolem.animation.StretchManager.DURATION), stretchMaxProgress);
                 if (elapsed >= com.anantaya.smartcgolem.animation.StretchManager.DURATION) {
                     if (mob instanceof CopperGolem copper)
                         com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
@@ -380,11 +394,11 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             }
 
             case STRETCH_SHRINK -> {
-                mob.getNavigation().stop();
+                faceStretchTarget(mob);
                 long elapsed = gameTime - stretchStageStartTick;
                 if (mob instanceof CopperGolem copper && elapsed % 20 == 0)
                     com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
-                            com.anantaya.smartcgolem.animation.StretchManager.SHRINK, (int)Math.min(elapsed,101L), stretchMaxProgress);
+                            com.anantaya.smartcgolem.animation.StretchManager.SHRINK, (int)Math.min(elapsed,com.anantaya.smartcgolem.animation.StretchManager.DURATION), stretchMaxProgress);
                 if (elapsed >= com.anantaya.smartcgolem.animation.StretchManager.DURATION) {
                     if (mob instanceof CopperGolem copper)
                         com.anantaya.smartcgolem.animation.StretchManager.stop(level, copper);
@@ -398,9 +412,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             case REMOTE_CLOSE -> {
                 // Native opener state and sound must persist across ticks:
                 // startOpen+stopOpen in the same tick would not visibly animate.
-                mob.getNavigation().stop();
-                if (currentTarget != null) {
-                    mob.getLookControl().setLookAt(
+                if (stretchActive) faceStretchTarget(mob);
+                else {
+                    mob.getNavigation().stop();
+                    if (currentTarget != null) mob.getLookControl().setLookAt(
                             currentTarget.getX() + 0.5,
                             currentTarget.getY() + 0.5,
                             currentTarget.getZ() + 0.5);
@@ -1457,7 +1472,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         stretchedChestTarget = currentTarget.immutable();
         stretchStageStartTick = gameTime;
         taskState = TaskState.STRETCH_GROW;
-        mob.getNavigation().stop();
+        faceStretchTarget(mob);
         com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
                 com.anantaya.smartcgolem.animation.StretchManager.GROW, 0, stretchMaxProgress);
         return true;
@@ -1467,7 +1482,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         if (!stretchActive) return;
         stretchStageStartTick = gameTime;
         taskState = TaskState.STRETCH_SHRINK;
-        mob.getNavigation().stop();
+        faceStretchTarget(mob);
         if (mob instanceof CopperGolem copper)
             com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
                     com.anantaya.smartcgolem.animation.StretchManager.SHRINK, 0, stretchMaxProgress);
