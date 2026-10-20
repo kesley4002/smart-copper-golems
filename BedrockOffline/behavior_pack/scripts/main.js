@@ -38,9 +38,6 @@ function key(dim, p) {
 function sameType(a, b) {
   return !!a && !!b && a.typeId === b.typeId;
 }
-function similar(a, b) {
-  return sameType(a, b) && (a.isStackableWith(b) || a.amount === 1 && b.amount === 1);
-}
 function containerAt(dim, p) {
   const block = dim.getBlock(p);
   if (!block) return undefined;
@@ -66,7 +63,8 @@ function matchesFilter(item, dest) {
   const sample = dest.container.getItem(0);
   if (!item || !sample) return false;
   if (dest.container.getItem(1)?.typeId !== CATEGORY_MARKER) {
-    return similar(item, sample);
+    // Exact means item identifier, not stack count or custom enchantments.
+    return sameType(item, sample);
   }
   const left = CATEGORIES[item.typeId], right = CATEGORIES[sample.typeId];
   return !!left && left === right;
