@@ -13,7 +13,8 @@ import java.util.UUID;
 public final class StretchManager {
     private StretchManager() {}
     public static final int IDLE = 0, GROW = 1, HOLD = 2, SHRINK = 3;
-    public static final int DURATION = 101;
+    // Play the original 5.05-second Blockbench motion at 2x speed (about 2.55s).
+    public static final int DURATION = 51;
     private record Session(int stage, int age, int maxProgress) {}
     private static final Map<UUID, Session> CURRENT = new HashMap<>();
     public static void initialize() {
