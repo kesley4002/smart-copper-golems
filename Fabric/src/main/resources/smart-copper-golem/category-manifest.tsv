@@ -12,8 +12,7 @@ mineral_ores	Minérios brutos (inclusive em bloco)	09,10,11,39	22
 mineral_refined	Lingotes, pepitas e metais refinados	09,10,11,39	8
 wood	Madeiras brutas, troncos e tábuas	13,14,15,09,10,11,39,12,47,46	62
 wood_shapes	Escadas e lajes de madeira	13,14,15	26
-wood_accessories	Acessórios de madeira: placas, botões, prateleiras e gravetos	16,17,18,19	61
-wood_crafting	Marcenaria: portas, cercas e portões	16,17,18,19,09,10,11,39,12,47,46	48
+wood_crafting	Marcenaria: portas, cercas, portões, placas, botões, prateleiras e gravetos	16,17,18,19,09,10,11,39,12,47,46	109
 vegetation	Vegetação e blocos naturais	20,34,35,36,09,10,11,39,12,47,46	83
 lighting	Iluminação (exceto tocha de redstone)	55,09,10,11,39,12,47,46	33
 glass	Vidros e painéis	21,22,09,10,11,39,12,47,46	35
