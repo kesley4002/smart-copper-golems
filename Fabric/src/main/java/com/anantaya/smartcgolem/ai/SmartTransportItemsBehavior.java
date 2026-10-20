@@ -1311,6 +1311,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         try {
             remaining = insertIntoChest(level, depositTarget, targetContainer, heldBefore);
+            if (remaining.getCount() < heldBefore.getCount()) {
+                // Sorting is part of the same locked operation as insertion.
+                ContainerAlphabetizer.sortAfterDeposit(targetContainer);
+            }
         } finally {
             unlockChest();
         }
@@ -1321,11 +1325,6 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         level.blockEntityChanged(depositTarget);
 
         boolean movedItem = remaining.getCount() < heldBefore.getCount();
-
-        if (movedItem) {
-            // Also sort successful remote deposits before releasing the lock.
-            ContainerAlphabetizer.sortAfterDeposit(targetContainer);
-        }
 
         if (movedItem) {
             spawnMagicDepositParticles(level, mob, depositTarget);
