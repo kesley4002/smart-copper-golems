@@ -56,7 +56,7 @@ jobs:
           assert tally == expected, ('manifest mismatch', tally, expected)
           with zipfile.ZipFile(jars[0]) as z:
               translations = z.read('smart-copper-golem/item-names-pt_br.tsv').decode('utf-8')
-          localized = [line.split('\\t', 1) for line in translations.splitlines()
+          localized = [line.split('\t', 1) for line in translations.splitlines()
                        if line and not line.startswith('#')]
           assert len(localized) == 1413, len(localized)
           assert len({row[0] for row in localized}) == 1413
