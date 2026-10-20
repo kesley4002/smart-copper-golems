@@ -25,6 +25,10 @@ jobs:
         run: |
           node --check BedrockOffline/behavior_pack/scripts/main.js
           node --check BedrockOffline/behavior_pack/scripts/category-index.js
+      - name: Check against the stable Minecraft Script API typings
+        run: |
+          npm install --no-save --ignore-scripts --no-audit --no-fund typescript@5 @minecraft/server@2.2.0
+          npx tsc --allowJs --checkJs --noEmit --skipLibCheck --module esnext --moduleResolution bundler --target es2022 BedrockOffline/behavior_pack/scripts/main.js
       - name: Verify manifests, catalog and assemble offline add-on
         run: python tools/build_bedrock_offline.py
       - uses: actions/upload-artifact@v7
