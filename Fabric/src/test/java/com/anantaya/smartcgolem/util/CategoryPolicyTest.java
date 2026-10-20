@@ -15,14 +15,14 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-/** Full regression coverage of the user-curated 1413-ID, 38-category catalog. */
+/** Full regression coverage of the user-curated 1413-ID, 40-category catalog. */
 public final class CategoryPolicyTest {
     @Test
     public void allSurvivalItemsHaveExactlyOneKnownCategory() {
         Map<String, String> catalog = CategoryPolicy.all();
         assertEquals("Missing or extra catalog IDs", 1413, catalog.size());
-        assertEquals("Expected 38 categories", 38, CategoryPolicy.categoryKeys().size());
-        assertEquals(38, new HashSet<>(catalog.values()).size());
+        assertEquals("Expected 40 categories", 40, CategoryPolicy.categoryKeys().size());
+        assertEquals(40, new HashSet<>(catalog.values()).size());
         assertTrue(catalog.keySet().stream().allMatch(id -> id.startsWith("minecraft:")));
         assertTrue(catalog.values().stream().allMatch(c -> CategoryPolicy.categoryKeys().contains(c)));
         for (Map.Entry<String, String> item : catalog.entrySet()) {
@@ -84,12 +84,12 @@ public final class CategoryPolicyTest {
         assertEquals("transport", CategoryPolicy.classify("minecraft:rail"));
         assertEquals("tools", CategoryPolicy.classify("minecraft:diamond_pickaxe"));
         assertEquals("armor", CategoryPolicy.classify("minecraft:diamond_chestplate"));
-        assertEquals("enchantments", CategoryPolicy.classify("minecraft:enchanted_book"));
+        assertEquals("books_enchantments", CategoryPolicy.classify("minecraft:enchanted_book"));
         assertEquals("functional", CategoryPolicy.classify("minecraft:crafting_table"));
         assertEquals("lighting", CategoryPolicy.classify("minecraft:torch"));
         assertEquals("containers", CategoryPolicy.classify("minecraft:bucket"));
         assertEquals("music_archaeology", CategoryPolicy.classify("minecraft:music_disc_cat"));
-        assertEquals(38, CategoryPolicy.categoryKeys().size());
+        assertEquals(40, CategoryPolicy.categoryKeys().size());
     }
 
     @Test
@@ -108,6 +108,20 @@ public final class CategoryPolicyTest {
     }
 
     @Test
+    public void separateBooksPotionsAndUtilityItems() {
+        assertEquals("books_enchantments", CategoryPolicy.classify("minecraft:book"));
+        assertEquals("books_enchantments", CategoryPolicy.classify("minecraft:enchanted_book"));
+        assertEquals("potions_alchemy", CategoryPolicy.classify("minecraft:potion"));
+        assertEquals("potions_alchemy", CategoryPolicy.classify("minecraft:brewing_stand"));
+        assertEquals("misc_utilities", CategoryPolicy.classify("minecraft:item_frame"));
+        assertEquals("misc_utilities", CategoryPolicy.classify("minecraft:name_tag"));
+        assertEquals("misc_utilities", CategoryPolicy.classify("minecraft:lead"));
+        assertEquals("misc_utilities", CategoryPolicy.classify("minecraft:saddle"));
+        assertEquals("misc_utilities", CategoryPolicy.classify("minecraft:armor_stand"));
+        assertEquals("misc_utilities", CategoryPolicy.classify("minecraft:flower_pot"));
+    }
+
+    @Test
     public void formerlySupportedAndBoundaryCases() {
         assertEquals("mineral_gems", CategoryPolicy.classify("minecraft:coal"));
         assertEquals("mineral_refined", CategoryPolicy.classify("minecraft:iron_ingot"));
@@ -123,7 +137,7 @@ public final class CategoryPolicyTest {
         assertEquals("food_raw_vegetables", CategoryPolicy.classify("minecraft:carrot"));
         assertEquals("food_raw_vegetables", CategoryPolicy.classify("minecraft:potato"));
         assertEquals("food_fruit", CategoryPolicy.classify("minecraft:glow_berries"));
-        assertEquals("enchantments", CategoryPolicy.classify("minecraft:glistering_melon_slice"));
+        assertEquals("potions_alchemy", CategoryPolicy.classify("minecraft:glistering_melon_slice"));
         assertEquals("special_blocks", CategoryPolicy.classify("minecraft:popped_chorus_fruit"));
         assertEquals("mob_drops", CategoryPolicy.classify("minecraft:rotten_flesh"));
         assertEquals("agriculture", CategoryPolicy.classify("minecraft:sugar"));
@@ -157,7 +171,7 @@ public final class CategoryPolicyTest {
                         Integer.parseInt(columns[3]), actual.get(columns[0]).intValue());
             }
         }
-        assertEquals(38, manifestKeys.size());
+        assertEquals(40, manifestKeys.size());
         assertEquals(CategoryPolicy.categoryKeys(), manifestKeys);
     }
 }

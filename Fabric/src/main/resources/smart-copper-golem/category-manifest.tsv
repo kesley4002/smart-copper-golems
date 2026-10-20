@@ -30,10 +30,12 @@ food_cooked_meat	Carnes e peixes cozidos	42,43,09,10,11,39,12,47,46	7
 mob_drops	Drops de mobs e tesouros	44,45,61,09,10,11,39,12,47,46	49
 redstone	Componentes e comandos de redstone	46,09,10,11,39,12,47	17
 machinery	Máquinas de redstone e cobre	46,47	16
-functional	Recipientes, bancadas e blocos funcionais	54,56,09,10,11,39,12,47,46	81
-transport	Transportes e montarias	48,49,09,10,11,39,12,47,46	62
-tools	Ferramentas e armas	50,09,10,11,39,12,47,46	51
+functional	Recipientes, bancadas e blocos funcionais	54,56,09,10,11,39,12,47,46	75
+transport	Transportes e montarias	48,49,09,10,11,39,12,47,46	61
+tools	Ferramentas e armas	50,09,10,11,39,12,47,46	53
 armor	Armaduras e moldes de ferraria	51,60,09,10,11,39,12,47,46	47
-enchantments	Livros, encantamentos, poções e navegação	52,53,09,10,11,39,12,47,46	29
-containers	Baldes e utilitários	57,09,10,11,39,12,47,46	17
+books_enchantments	Livros, papel e encantamentos	52,53	8
+potions_alchemy	Poções, frascos e alquimia	52,53	9
+misc_utilities	Navegação, molduras e utilidades diversas	48,52,53,54,57	18
+containers	Baldes e utilitários	57,09,10,11,39,12,47,46	16
 music_archaeology	Música e arqueologia	58,59,09,10,11,39,12,47,46	45
