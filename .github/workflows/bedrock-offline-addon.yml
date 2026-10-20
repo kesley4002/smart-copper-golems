@@ -1,0 +1,33 @@
+name: Build offline Bedrock add-on alpha
+
+on:
+  push:
+    branches: [feature/bedrock-offline-addon-alpha]
+    paths:
+      - 'BedrockOffline/**'
+      - 'tools/build_bedrock_offline.py'
+      - '.github/workflows/bedrock-offline-addon.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify Bedrock script syntax
+        run: |
+          node --check BedrockOffline/behavior_pack/scripts/main.js
+          node --check BedrockOffline/behavior_pack/scripts/category-index.js
+      - name: Verify manifests, catalog and assemble offline add-on
+        run: python tools/build_bedrock_offline.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: SmartCopperGolems_Offline_0.1.0_alpha
+          path: build/SmartCopperGolems_Offline_0.1.0_alpha.mcaddon
