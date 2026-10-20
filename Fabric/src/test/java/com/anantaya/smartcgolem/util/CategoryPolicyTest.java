@@ -21,7 +21,7 @@ public final class CategoryPolicyTest {
     public void allSurvivalItemsHaveExactlyOneKnownCategory() {
         Map<String, String> catalog = CategoryPolicy.all();
         assertEquals("Missing or extra catalog IDs", 1413, catalog.size());
-        assertEquals("Expected 40 categories", 38, CategoryPolicy.categoryKeys().size());
+        assertEquals("Expected 40 categories", 40, CategoryPolicy.categoryKeys().size());
         assertEquals(40, new HashSet<>(catalog.values()).size());
         assertTrue(catalog.keySet().stream().allMatch(id -> id.startsWith("minecraft:")));
         assertTrue(catalog.values().stream().allMatch(c -> CategoryPolicy.categoryKeys().contains(c)));
