@@ -108,6 +108,20 @@ public final class CategoryPolicyTest {
     }
 
     @Test
+    public void separateBooksPotionsAndUtilityItems() {
+        assertEquals("books_enchantments", CategoryPolicy.classify("minecraft:book"));
+        assertEquals("books_enchantments", CategoryPolicy.classify("minecraft:enchanted_book"));
+        assertEquals("potions_alchemy", CategoryPolicy.classify("minecraft:potion"));
+        assertEquals("potions_alchemy", CategoryPolicy.classify("minecraft:brewing_stand"));
+        assertEquals("misc_utilities", CategoryPolicy.classify("minecraft:item_frame"));
+        assertEquals("misc_utilities", CategoryPolicy.classify("minecraft:name_tag"));
+        assertEquals("misc_utilities", CategoryPolicy.classify("minecraft:lead"));
+        assertEquals("misc_utilities", CategoryPolicy.classify("minecraft:saddle"));
+        assertEquals("misc_utilities", CategoryPolicy.classify("minecraft:armor_stand"));
+        assertEquals("misc_utilities", CategoryPolicy.classify("minecraft:flower_pot"));
+    }
+
+    @Test
     public void formerlySupportedAndBoundaryCases() {
         assertEquals("mineral_gems", CategoryPolicy.classify("minecraft:coal"));
         assertEquals("mineral_refined", CategoryPolicy.classify("minecraft:iron_ingot"));
