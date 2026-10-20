@@ -50,7 +50,11 @@ public class SmartCopperGolem implements ModInitializer {
                     .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_MODERATOR))
                     .then(Commands.literal("itemframes")
                             .then(Commands.literal("0").executes(ctx -> FrameRotationCommands.rotateLoaded(ctx.getSource(), 0)))
-                            .then(Commands.literal("45").executes(ctx -> FrameRotationCommands.rotateLoaded(ctx.getSource(), 1)))));
+                            .then(Commands.literal("45").executes(ctx -> FrameRotationCommands.rotateLoaded(ctx.getSource(), 1))))
+                    .then(Commands.literal("item")
+                            .then(Commands.literal("frames")
+                                    .then(Commands.literal("0").executes(ctx -> FrameRotationCommands.rotateLoaded(ctx.getSource(), 0)))
+                                    .then(Commands.literal("45").executes(ctx -> FrameRotationCommands.rotateLoaded(ctx.getSource(), 1))))));
             dispatcher.register(Commands.literal("language")
                     .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_MODERATOR))
                     .executes(ctx -> showLanguage(ctx.getSource()))
