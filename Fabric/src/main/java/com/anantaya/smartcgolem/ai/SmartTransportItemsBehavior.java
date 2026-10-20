@@ -335,6 +335,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                             currentTarget.getY() + 0.5,
                             currentTarget.getZ() + 0.5);
                 }
+                if (remoteChestLevel != null && remoteChestPos != null && gameTime < remoteCloseAt) {
+                    // Vanilla periodic opener checks may reset the lid because
+                    // this golem is physically too far away to count as an opener.
+                    // Reassert only the visual lid event; NEVER replay the sound.
+                    sendRemoteChestLidEvent(remoteChestLevel, remoteChestPos, true);
+                }
                 if (gameTime >= remoteCloseAt) {
                     closeOpenedContainer();
                     unlockChest();
