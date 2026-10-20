@@ -10,6 +10,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.core.particles.ColorParticleOption;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.PathfinderMob;
@@ -61,7 +62,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private static final int MAGIC_DEPOSIT_STUCK_TICKS = 100;
     // Keep the remote lid visibly open long enough for a client animation.
     private static final int REMOTE_LID_OPEN_TICKS = 10;
+    private static final int REMOTE_CHEST_LID_OPEN_TICKS = 24;
     private long remoteCloseAt = -1L;
+    private ServerLevel remoteChestLevel;
+    private BlockPos remoteChestPos;
 
     private boolean currentDestinationIsFramedMatch = false;
     private boolean currentDestinationHadReachablePath = true;
@@ -122,6 +126,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         currentWalkTarget = null;
         openedContainer = null;
         openedCopperGolem = null;
+        remoteChestLevel = null;
+        remoteChestPos = null;
         remoteCloseAt = -1L;
         actionDone = false;
         ticksAtTarget = 0;
@@ -328,6 +334,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                             currentTarget.getX() + 0.5,
                             currentTarget.getY() + 0.5,
                             currentTarget.getZ() + 0.5);
+                }
+                if (remoteChestLevel != null && remoteChestPos != null && gameTime < remoteCloseAt) {
+                    // Vanilla periodic opener checks may reset the lid because
+                    // this golem is physically too far away to count as an opener.
+                    // Reassert only the visual lid event; NEVER replay the sound.
+                    sendRemoteChestLidEvent(remoteChestLevel, remoteChestPos, true);
                 }
                 if (gameTime >= remoteCloseAt) {
                     closeOpenedContainer();
@@ -919,7 +931,38 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         return null;
     }
 
+    /**
+     * Block event 1 is the vanilla chest lid animation (0=closed, 1=open).
+     * A double chest requires notifications for both physical chest blocks.
+     * This affects only the remote chest visual path; reachable chests and
+     * barrels continue to use vanilla startOpen/stopOpen.
+     */
+    private void sendRemoteChestLidEvent(ServerLevel level, BlockPos pos, boolean opening) {
+        BlockState state = level.getBlockState(pos);
+        if (!(state.getBlock() instanceof ChestBlock)) return;
+        level.blockEvent(pos, state.getBlock(), 1, opening ? 1 : 0);
+        var type = state.getValue(ChestBlock.TYPE);
+        if (type != net.minecraft.world.level.block.state.properties.ChestType.SINGLE) {
+            BlockPos partnerPos = pos.relative(ChestBlock.getConnectedDirection(state));
+            BlockState partner = level.getBlockState(partnerPos);
+            if (partner.getBlock() == state.getBlock()
+                    && partner.getValue(ChestBlock.TYPE) != net.minecraft.world.level.block.state.properties.ChestType.SINGLE) {
+                level.blockEvent(partnerPos, partner.getBlock(), 1, opening ? 1 : 0);
+            }
+        }
+    }
+
     private void closeOpenedContainer() {
+        // Distant chests cannot rely on the vanilla opener counter: it
+        // periodically checks nearby entities and excludes a distant golem.
+        // Close the client lid explicitly, including both halves of a double chest.
+        if (remoteChestLevel != null && remoteChestPos != null) {
+            sendRemoteChestLidEvent(remoteChestLevel, remoteChestPos, false);
+            remoteChestLevel.playSound(null, remoteChestPos, SoundEvents.CHEST_CLOSE,
+                    SoundSource.BLOCKS, 0.5F, 1.0F);
+            remoteChestLevel = null;
+            remoteChestPos = null;
+        }
 
         if (openedContainer != null && openedCopperGolem != null) {
 
@@ -1381,10 +1424,24 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             // reachable chest or barrel, without skipping the 100-tick wait.
             try {
                 copperGolem.setOpenedChestPos(depositTarget);
-                chest.startOpen(copperGolem);
-                openedContainer = chest;
-                openedCopperGolem = copperGolem;
-                remoteCloseAt = gameTime + REMOTE_LID_OPEN_TICKS;
+                if (chest instanceof ChestBlockEntity) {
+                    // Unlike barrels, chest opener counters are distance-aware.
+                    // The distant golem is not counted, so the lid closes early
+                    // and the regular opening sound is often never emitted.
+                    // Send the actual vanilla lid block events and play the
+                    // normal chest sound at the chest's location instead.
+                    remoteChestLevel = level;
+                    remoteChestPos = depositTarget.immutable();
+                    sendRemoteChestLidEvent(level, depositTarget, true);
+                    level.playSound(null, depositTarget, SoundEvents.CHEST_OPEN,
+                            SoundSource.BLOCKS, 0.5F, 1.0F);
+                    remoteCloseAt = gameTime + REMOTE_CHEST_LID_OPEN_TICKS;
+                } else {
+                    chest.startOpen(copperGolem);
+                    openedContainer = chest;
+                    openedCopperGolem = copperGolem;
+                    remoteCloseAt = gameTime + REMOTE_LID_OPEN_TICKS;
+                }
                 taskState = TaskState.REMOTE_CLOSE;
                 System.out.println("[SMART-GOLEM MAGIC-VANILLA-OPEN] target=" + depositTarget);
                 return true;
