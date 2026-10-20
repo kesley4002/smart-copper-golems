@@ -319,6 +319,11 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     return;
                 }
 
+                // Never open a chest until physically at its reachable approach.
+                if (!hasArrived(mob)) {
+                    switchState(mob, TaskState.WALK_TO_DESTINATION, currentTarget, gameTime);
+                    return;
+                }
                 if (isChestLocked(currentTarget, gameTime) && !isChestBusy(chest)) {
                     switchState(mob, TaskState.INTERACT_DESTINATION, currentTarget, gameTime);
                 }
@@ -536,6 +541,14 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     }
 
     private void interactWithDestination(ServerLevel level, PathfinderMob mob, long gameTime) {
+
+        // Guard again: a knockback or a changing floor cannot trigger a
+        // deposit into a chest that is no longer within interaction range.
+        if (currentTarget != null && !hasArrived(mob)) {
+            closeOpenedContainer();
+            switchState(mob, TaskState.WALK_TO_DESTINATION, currentTarget, gameTime);
+            return;
+        }
 
         if (currentTarget == null) {
             closeOpenedContainer();
