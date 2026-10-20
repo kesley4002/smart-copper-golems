@@ -6,72 +6,54 @@ import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 /**
- * Sorts a full barrel or logical double-chest inventory after a successful
- * copper-golem deposit. Uses stable English registry IDs, not display names.
- *
- * Every original stack is copied first; only identical item + component
- * combinations may merge. Items with damage, names, enchantments or different
- * custom components are kept separate. Does not run during idle/search ticks.
+ * Re-packs an entire barrel or logical double chest after successful deposit.
+ * Sorting and merging happen in memory, then contents are written in one pass.
  */
 public final class ContainerAlphabetizer {
     private ContainerAlphabetizer() {}
 
     public static boolean sortAfterDeposit(Container inventory) {
-        final int slots = inventory.getContainerSize();
-        final List<ItemStack> original = new ArrayList<>(slots);
-        final List<ItemStack> compacted = new ArrayList<>(slots);
-
+        int slots = inventory.getContainerSize();
+        List<ItemStack> before = new ArrayList<>(slots);
+        List<AlphabeticPacking.Entry<ItemStack>> input = new ArrayList<>(slots);
         for (int i = 0; i < slots; i++) {
-            ItemStack stack = inventory.getItem(i);
-            original.add(stack.copy());
+            ItemStack stack = inventory.getItem(i).copy();
+            before.add(stack);
             if (stack.isEmpty()) continue;
-
-            ItemStack remaining = stack.copy();
-            for (ItemStack existing : compacted) {
-                if (remaining.isEmpty()) break;
-                if (!ItemStack.isSameItemSameComponents(existing, remaining)) continue;
-
-                int capacity = existing.getMaxStackSize() - existing.getCount();
-                if (capacity <= 0) continue;
-
-                int moved = Math.min(capacity, remaining.getCount());
-                existing.grow(moved);
-                remaining.shrink(moved);
-            }
-            if (!remaining.isEmpty()) {
-                compacted.add(remaining.copy());
-            }
+            input.add(new AlphabeticPacking.Entry<>(
+                    BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(),
+                    stack,
+                    stack.getCount(),
+                    stack.getMaxStackSize()));
         }
 
-        // Stable sort retains the relative order of different components
-        // sharing the same English ID; only their item kind is alphabetized.
-        compacted.sort(Comparator.comparing(stack ->
-                BuiltInRegistries.ITEM.getKey(stack.getItem()).toString()));
-
-        if (compacted.size() > slots) {
-            // Defensive: never partially alter an inventory if packing fails.
-            throw new IllegalStateException("Container packing exceeded slot count");
+        List<AlphabeticPacking.Entry<ItemStack>> ordered =
+                AlphabeticPacking.compactAndSort(input, ItemStack::isSameItemSameComponents);
+        if (ordered.size() > slots) {
+            throw new IllegalStateException("Packed items exceed inventory slots");
         }
+
+        List<ItemStack> result = new ArrayList<>(slots);
+        for (AlphabeticPacking.Entry<ItemStack> entry : ordered) {
+            result.add(entry.variant().copyWithCount(entry.count()));
+        }
+        while (result.size() < slots) result.add(ItemStack.EMPTY);
 
         boolean changed = false;
         for (int i = 0; i < slots; i++) {
-            ItemStack expected = i < compacted.size() ? compacted.get(i) : ItemStack.EMPTY;
-            ItemStack before = original.get(i);
-            if (before.getCount() != expected.getCount()
-                    || !ItemStack.isSameItemSameComponents(before, expected)) {
+            ItemStack previous = before.get(i);
+            ItemStack next = result.get(i);
+            if (previous.getCount() != next.getCount()
+                    || !ItemStack.isSameItemSameComponents(previous, next)) {
                 changed = true;
                 break;
             }
         }
         if (!changed) return false;
-
-        for (int i = 0; i < slots; i++) {
-            inventory.setItem(i, i < compacted.size() ? compacted.get(i) : ItemStack.EMPTY);
-        }
+        for (int i = 0; i < slots; i++) inventory.setItem(i, result.get(i));
         inventory.setChanged();
         return true;
     }
