@@ -5,6 +5,8 @@ import com.anantaya.smartcgolem.util.SortLanguage;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
+import net.minecraft.world.entity.animal.golem.CopperGolem;
 import net.minecraft.commands.Commands;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.minecraft.server.permissions.Permissions;
@@ -25,6 +27,14 @@ public class SmartCopperGolem implements ModInitializer {
         // The setting lives with the save, not with any individual client.
         ServerLifecycleEvents.SERVER_STARTED.register(server -> { ServerSortSettings.load(server); ServerWorkZoneSettings.load(server); });
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> { ServerSortSettings.reset(); ServerWorkZoneSettings.reset(); });
+
+        // Capture each new golem's home as soon as it enters a server level.
+        // Previously seen golems keep their persisted UUID anchors.
+        ServerEntityEvents.ENTITY_LOAD.register((entity, world) -> {
+            if (entity instanceof CopperGolem golem) {
+                ServerWorkZoneSettings.anchor(golem);
+            }
+        });
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             // /scg language is namespaced for other mods; /language is the requested shortcut.
