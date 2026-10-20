@@ -9,31 +9,28 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/** Server-owned, per-entity stretch animation stage. No extra mods required. */
+/** Server-owned golem stretch phases and target-dependent maximum reach. */
 public final class StretchManager {
     private StretchManager() {}
     public static final int IDLE = 0, GROW = 1, HOLD = 2, SHRINK = 3;
-    public static final int DURATION = 101; // uploaded JSON animation_length=5.05s
-    private record Session(int stage, int age) {}
+    public static final int DURATION = 101;
+    private record Session(int stage, int age, int maxProgress) {}
     private static final Map<UUID, Session> CURRENT = new HashMap<>();
-
     public static void initialize() {
         PayloadTypeRegistry.clientboundPlay().register(StretchPayload.TYPE, StretchPayload.CODEC);
     }
     public static void clear() { CURRENT.clear(); }
-
-    public static void set(ServerLevel level, CopperGolem golem, int stage, int age) {
-        Session previous = CURRENT.put(golem.getUUID(), new Session(stage, age));
-        if (previous != null && previous.stage == stage && previous.age == age) return;
-        send(level, golem, stage, age);
+    public static void set(ServerLevel level, CopperGolem golem, int stage, int age, int maxProgress) {
+        int capped = Math.max(0, Math.min(1000, maxProgress));
+        Session previous = CURRENT.put(golem.getUUID(), new Session(stage, age, capped));
+        if (previous != null && previous.stage == stage && previous.age == age && previous.maxProgress == capped) return;
+        send(level, golem, stage, age, capped);
     }
     public static void stop(ServerLevel level, CopperGolem golem) {
-        if (CURRENT.remove(golem.getUUID()) != null) send(level, golem, IDLE, 0);
+        if (CURRENT.remove(golem.getUUID()) != null) send(level, golem, IDLE, 0, 0);
     }
-    private static void send(ServerLevel level, CopperGolem golem, int stage, int age) {
-        StretchPayload payload = new StretchPayload(golem.getId(), stage, age);
-        // Nearby clients are refreshed frequently, including joiners who
-        // entered visibility after the stage began.
+    private static void send(ServerLevel level, CopperGolem golem, int stage, int age, int maxProgress) {
+        StretchPayload payload = new StretchPayload(golem.getId(), stage, age, maxProgress);
         for (var player : level.players()) {
             if (player.distanceToSqr(golem) <= 128 * 128
                     && ServerPlayNetworking.canSend(player, StretchPayload.TYPE)) {
