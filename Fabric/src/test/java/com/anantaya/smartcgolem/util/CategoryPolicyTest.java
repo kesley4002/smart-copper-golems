@@ -39,7 +39,7 @@ public final class CategoryPolicyTest {
         // user's original 61-section Java 26.2 Survival catalog, joined by LF.
         // Detects swapping a missing item for another even when the total
         // remains 1413 and all category totals look correct.
-        String allIds = String.join("\\n", new TreeSet<>(CategoryPolicy.all().keySet()));
+        String allIds = String.join("\n", new TreeSet<>(CategoryPolicy.all().keySet()));
         String sha256 = HexFormat.of().formatHex(
                 MessageDigest.getInstance("SHA-256").digest(
                         allIds.getBytes(StandardCharsets.UTF_8)));
