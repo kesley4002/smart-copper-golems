@@ -1,35 +1,39 @@
-# Category key TAB PT-BR display name TAB original catalog sections TAB expected number of IDs
-stone_blocks	Pedras brutas e trabalhadas	01,02,07	69
-stone_construction	Construção de pedra: escadas, lajes e muros	03,04,05	121
-soil	Terras, solos e cascalhos	06	14
-special_blocks	Blocos especiais e dimensionais	08,38,40	37
-minerals	Minérios, metais e cristais	09,10,11,39	58
-copper_building	Construções de cobre	12	47
-wood	Madeiras: troncos, tábuas, escadas e lajes	13,14,15	88
-wood_crafting	Marcenaria: portas, cercas, placas e prateleiras	16,17,18,19	109
-vegetation	Vegetação: folhas, mudas, flores, fungos e musgos	20,34,35,36	84
-glass	Vidros e painéis	21,22	35
-wool	Lãs e tapetes	23,24	32
-concrete	Concreto e pó de concreto	25,26	32
-terracotta	Terracotas comuns e vitrificadas	27,28	33
-dyes	Corantes	29	16
-colorful_decor	Decoração colorida: camas, velas e estandartes	30,31,32	59
-portable_storage	Armazenamento portátil: shulkers e bolsas	33	34
-aquatic	Corais e itens aquáticos	37	37
-agriculture	Agricultura: sementes e colheitas	41	15
-food_raw_meat	Carnes e peixes crus	42,43	9
-food_cooked_meat	Carnes e peixes cozidos	42,43	7
-food_raw_vegetables	Vegetais, batatas e algas	42,43	7
-food_fruit	Frutas	42,43	7
-food_meals	Refeições, sopas e doces	42,43	9
-mob_drops	Drops de mobs e tesouros	44,45,61	49
-redstone	Redstone e circuitos	46	26
-copper_machines	Maquinaria e acessórios de cobre	47	73
-transport	Transportes e montarias	48,49	62
-tools	Ferramentas e armas	50	51
-armor	Armaduras e moldes de ferraria	51,60	47
-enchantments	Livros, encantamentos, poções e navegação	52,53	29
-functional	Baús, bancadas e blocos funcionais	54,56	41
-lighting	Iluminação	55	14
-containers	Baldes e utilitários	57	17
-music_archaeology	Música e arqueologia	58,59	45
+# Category key TAB PT-BR name TAB source catalog sections TAB IDs
+stone_blocks	Pedras e blocos de cobre para construção	01,02,07,09,10,11,39,12,47,46	100
+stone_construction	Escadas, lajes e muros de pedra/cobre	03,04,05,09,10,11,39,12,47,46	137
+soil	Terras, solos e cascalhos	06,09,10,11,39,12,47,46	14
+special_blocks	Blocos especiais e dimensionais	08,38,40,09,10,11,39,12,47,46	37
+mineral_blocks	Blocos compactados de minerais	09,10,11,39	13
+mineral_gems	Gemas e recursos sem fundição	09,10,11,39	15
+mineral_ores	Minérios brutos (inclusive em bloco)	09,10,11,39	22
+mineral_refined	Lingotes, pepitas e metais refinados	09,10,11,39	8
+wood	Madeiras brutas, troncos e tábuas	13,14,15,09,10,11,39,12,47,46	62
+wood_shapes	Escadas e lajes de madeira	13,14,15	26
+wood_accessories	Acessórios de madeira: placas, botões, prateleiras e gravetos	16,17,18,19	61
+wood_crafting	Marcenaria: portas, cercas e portões	16,17,18,19,09,10,11,39,12,47,46	48
+vegetation	Vegetação e blocos naturais	20,34,35,36,09,10,11,39,12,47,46	83
+lighting	Iluminação (exceto tocha de redstone)	55,09,10,11,39,12,47,46	33
+glass	Vidros e painéis	21,22,09,10,11,39,12,47,46	35
+wool	Lãs e tapetes	23,24,09,10,11,39,12,47,46	32
+concrete	Concreto e pó de concreto	25,26,09,10,11,39,12,47,46	32
+terracotta	Terracotas comuns e vitrificadas	27,28,09,10,11,39,12,47,46	33
+dyes	Corantes	29,09,10,11,39,12,47,46	16
+colorful_decor	Decoração colorida e estátuas	30,31,32,09,10,11,39,12,47,46	67
+portable_storage	Armazenamento portátil: shulkers e bolsas	33,09,10,11,39,12,47,46	34
+aquatic	Corais e itens aquáticos	37,09,10,11,39,12,47,46	37
+agriculture	Agricultura: sementes e colheitas	41,09,10,11,39,12,47,46	15
+food_fruit	Frutas	42,43,09,10,11,39,12,47,46	7
+food_raw_vegetables	Vegetais, batatas e algas	42,43,09,10,11,39,12,47,46	7
+food_raw_meat	Carnes e peixes crus	42,43,09,10,11,39,12,47,46	9
+food_meals	Refeições, sopas e doces	42,43,09,10,11,39,12,47,46	9
+food_cooked_meat	Carnes e peixes cozidos	42,43,09,10,11,39,12,47,46	7
+mob_drops	Drops de mobs e tesouros	44,45,61,09,10,11,39,12,47,46	49
+redstone	Componentes e comandos de redstone	46,09,10,11,39,12,47	17
+machinery	Máquinas de redstone e cobre	46,47	16
+functional	Recipientes, bancadas e blocos funcionais	54,56,09,10,11,39,12,47,46	81
+transport	Transportes e montarias	48,49,09,10,11,39,12,47,46	62
+tools	Ferramentas e armas	50,09,10,11,39,12,47,46	51
+armor	Armaduras e moldes de ferraria	51,60,09,10,11,39,12,47,46	47
+enchantments	Livros, encantamentos, poções e navegação	52,53,09,10,11,39,12,47,46	29
+containers	Baldes e utilitários	57,09,10,11,39,12,47,46	17
+music_archaeology	Música e arqueologia	58,59,09,10,11,39,12,47,46	45
