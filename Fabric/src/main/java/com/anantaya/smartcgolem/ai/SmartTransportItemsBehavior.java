@@ -46,6 +46,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         WALK_TO_DESTINATION,
         WAIT_FOR_DESTINATION,
         INTERACT_DESTINATION,
+        REMOTE_CLOSE,
         RETURN_TO_SOURCE
     }
 
@@ -58,6 +59,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private static final long LOCK_STALE_TICKS = 600;
 
     private static final int MAGIC_DEPOSIT_STUCK_TICKS = 100;
+    // Keep the remote lid visibly open long enough for a client animation.
+    private static final int REMOTE_LID_OPEN_TICKS = 10;
+    private long remoteCloseAt = -1L;
 
     private boolean currentDestinationIsFramedMatch = false;
     private boolean currentDestinationHadReachablePath = true;
@@ -118,6 +122,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         currentWalkTarget = null;
         openedContainer = null;
         openedCopperGolem = null;
+        remoteCloseAt = -1L;
         actionDone = false;
         ticksAtTarget = 0;
         taskState = TaskState.IDLE;
@@ -313,6 +318,23 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             }
 
             case INTERACT_DESTINATION -> interactWithDestination(level, mob, gameTime);
+
+            case REMOTE_CLOSE -> {
+                // Native opener state and sound must persist across ticks:
+                // startOpen+stopOpen in the same tick would not visibly animate.
+                mob.getNavigation().stop();
+                if (currentTarget != null) {
+                    mob.getLookControl().setLookAt(
+                            currentTarget.getX() + 0.5,
+                            currentTarget.getY() + 0.5,
+                            currentTarget.getZ() + 0.5);
+                }
+                if (gameTime >= remoteCloseAt) {
+                    closeOpenedContainer();
+                    unlockChest();
+                    continueAfterRemoteDeposit(level, mob, gameTime, currentTarget);
+                }
+            }
 
             case RETURN_TO_SOURCE -> {
                 walkToTarget(mob, gameTime);
@@ -1308,15 +1330,19 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         mob.getNavigation().stop();
 
         ItemStack remaining;
+        boolean deposited = false;
 
         try {
             remaining = insertIntoChest(level, depositTarget, targetContainer, heldBefore);
-            if (remaining.getCount() < heldBefore.getCount()) {
+            deposited = remaining.getCount() < heldBefore.getCount();
+            if (deposited) {
                 // Sorting is part of the same locked operation as insertion.
                 ContainerAlphabetizer.sortAfterDeposit(targetContainer);
             }
         } finally {
-            unlockChest();
+            // A successful remote deposit retains the chest lock until the
+            // lid has finished its native open/close sequence.
+            if (!deposited) unlockChest();
         }
 
         mob.setItemInHand(InteractionHand.MAIN_HAND, remaining);
@@ -1349,35 +1375,52 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         markDestinationSelection(false, true);
         resetStuckTracking(mob, gameTime);
 
-
-        if (!mob.getMainHandItem().isEmpty()) {
-
-            BlockPos alternateDestination = findDestinationChest(level, mob);
-
-            if (alternateDestination != null && !alternateDestination.equals(depositTarget)) {
-                switchState(mob, TaskState.WALK_TO_DESTINATION, alternateDestination, gameTime);
+        if (movedItem && mob instanceof CopperGolem copperGolem) {
+            // This is a remote deposit. We validated the filter and inserted
+            // the item already. Use the exact vanilla opener used for a
+            // reachable chest or barrel, without skipping the 100-tick wait.
+            try {
+                copperGolem.setOpenedChestPos(depositTarget);
+                chest.startOpen(copperGolem);
+                openedContainer = chest;
+                openedCopperGolem = copperGolem;
+                remoteCloseAt = gameTime + REMOTE_LID_OPEN_TICKS;
+                taskState = TaskState.REMOTE_CLOSE;
+                System.out.println("[SMART-GOLEM MAGIC-VANILLA-OPEN] target=" + depositTarget);
                 return true;
+            } catch (RuntimeException exception) {
+                closeOpenedContainer();
+                unlockChest();
+                throw exception;
             }
         }
 
-        BlockPos sourceToReturn = returnToSourceChest != null
-                ? returnToSourceChest
-                : lastPickupChest;
+        unlockChest();
+        continueAfterRemoteDeposit(level, mob, gameTime, depositTarget);
+        return true;
+    }
 
-        if (sourceToReturn != null) {
-            returnToSourceChest = sourceToReturn;
-            switchState(mob, TaskState.RETURN_TO_SOURCE, sourceToReturn, gameTime);
+    private void continueAfterRemoteDeposit(ServerLevel level, PathfinderMob mob,
+                                            long gameTime, BlockPos depositTarget) {
+        if (!mob.getMainHandItem().isEmpty()) {
+            BlockPos alternate = findDestinationChest(level, mob);
+            if (alternate != null && !alternate.equals(depositTarget)) {
+                switchState(mob, TaskState.WALK_TO_DESTINATION, alternate, gameTime);
+                return;
+            }
+        }
 
-            System.out.println("[SMART-GOLEM MAGIC-RETURN-TO-SOURCE] returning to=" + sourceToReturn);
+        BlockPos source = returnToSourceChest != null ? returnToSourceChest : lastPickupChest;
+        if (source != null) {
+            returnToSourceChest = source;
+            switchState(mob, TaskState.RETURN_TO_SOURCE, source, gameTime);
+            System.out.println("[SMART-GOLEM MAGIC-RETURN-TO-SOURCE] returning to=" + source);
         } else {
             taskState = TaskState.IDLE;
             currentTarget = null;
             currentWalkTarget = null;
-
             System.out.println("[SMART-GOLEM MAGIC-RETURN-FAILED] No saved source chest.");
         }
-
-        return true;
     }
 
     private double distanceToCurrentWalkTargetSqr(PathfinderMob mob) {
