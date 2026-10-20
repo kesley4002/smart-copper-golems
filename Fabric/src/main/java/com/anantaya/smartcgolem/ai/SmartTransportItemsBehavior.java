@@ -3,6 +3,7 @@ package com.anantaya.smartcgolem.ai;
 
 import com.google.common.collect.ImmutableMap;
 import com.anantaya.smartcgolem.util.SearchVolume;
+import com.anantaya.smartcgolem.util.ContainerAlphabetizer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
@@ -598,6 +599,11 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 level.blockEntityChanged(currentTarget);
 
                 movedItem = remaining.getCount() < heldBefore.getCount();
+                if (movedItem) {
+                    // Sorting happens while this golem still owns the lock.
+                    // Works for both single barrels and combined double chests.
+                    ContainerAlphabetizer.sortAfterDeposit(targetContainer);
+                }
 
                 System.out.println("[SMART-GOLEM DEPOSIT END] chest=" + currentTarget
                         + " remainingHand=" + mob.getMainHandItem());
@@ -1305,6 +1311,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         try {
             remaining = insertIntoChest(level, depositTarget, targetContainer, heldBefore);
+            if (remaining.getCount() < heldBefore.getCount()) {
+                // Sorting is part of the same locked operation as insertion.
+                ContainerAlphabetizer.sortAfterDeposit(targetContainer);
+            }
         } finally {
             unlockChest();
         }
