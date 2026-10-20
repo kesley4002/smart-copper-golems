@@ -753,10 +753,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             Predicate<BlockState> blockType
     ) {
         BlockPos mobPos = mob.blockPosition();
+        BlockPos home = mob instanceof CopperGolem golem
+                ? ServerWorkZoneSettings.anchor(golem) : mobPos;
         SearchVolume area = new SearchVolume(
-                (mob instanceof CopperGolem golem ? ServerWorkZoneSettings.anchor(golem) : mobPos).getX(),
-                mobPos.getY(),
-                (mob instanceof CopperGolem golem ? ServerWorkZoneSettings.anchor(golem) : mobPos).getZ(),
+                home.getX(), mobPos.getY(), home.getZ(),
                 ServerWorkZoneSettings.halfWidth(), verticalSearchDistance
         );
         java.util.List<BlockPos> candidates = new java.util.ArrayList<>();
