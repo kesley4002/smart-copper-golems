@@ -15,14 +15,14 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-/** Full regression coverage of the user-curated 1413-ID, 43-category catalog. */
+/** Full regression coverage of the user-curated 1413-ID, 42-category catalog. */
 public final class CategoryPolicyTest {
     @Test
     public void allSurvivalItemsHaveExactlyOneKnownCategory() {
         Map<String, String> catalog = CategoryPolicy.all();
         assertEquals("Missing or extra catalog IDs", 1413, catalog.size());
-        assertEquals("Expected 43 categories", 43, CategoryPolicy.categoryKeys().size());
-        assertEquals(43, new HashSet<>(catalog.values()).size());
+        assertEquals("Expected 42 categories", 43, CategoryPolicy.categoryKeys().size());
+        assertEquals(42, new HashSet<>(catalog.values()).size());
         assertTrue(catalog.keySet().stream().allMatch(id -> id.startsWith("minecraft:")));
         assertTrue(catalog.values().stream().allMatch(c -> CategoryPolicy.categoryKeys().contains(c)));
         for (Map.Entry<String, String> item : catalog.entrySet()) {
@@ -89,13 +89,13 @@ public final class CategoryPolicyTest {
         assertEquals("lighting", CategoryPolicy.classify("minecraft:torch"));
         assertEquals("containers", CategoryPolicy.classify("minecraft:bucket"));
         assertEquals("music_archaeology", CategoryPolicy.classify("minecraft:music_disc_cat"));
-        assertEquals(43, CategoryPolicy.categoryKeys().size());
+        assertEquals(42, CategoryPolicy.categoryKeys().size());
     }
 
     @Test
     public void newMaterialSubcategories() {
         assertEquals("wood_shapes", CategoryPolicy.classify("minecraft:oak_stairs"));
-        assertEquals("wood_accessories", CategoryPolicy.classify("minecraft:oak_sign"));
+        assertEquals("wood_crafting", CategoryPolicy.classify("minecraft:oak_sign"));
         assertEquals("mineral_ores", CategoryPolicy.classify("minecraft:raw_iron"));
         assertEquals("mineral_refined", CategoryPolicy.classify("minecraft:iron_ingot"));
         assertEquals("mineral_blocks", CategoryPolicy.classify("minecraft:diamond_block"));
@@ -145,7 +145,7 @@ public final class CategoryPolicyTest {
         assertEquals("wood", CategoryPolicy.classify("minecraft:crimson_planks"));
         assertEquals("wood_shapes", CategoryPolicy.classify("minecraft:oak_stairs"));
         assertEquals("wood_crafting", CategoryPolicy.classify("minecraft:oak_fence"));
-        assertEquals("wood_accessories", CategoryPolicy.classify("minecraft:stick"));
+        assertEquals("wood_crafting", CategoryPolicy.classify("minecraft:stick"));
         assertEquals("stone_construction", CategoryPolicy.classify("minecraft:quartz_stairs"));
         assertEquals("stone_blocks", CategoryPolicy.classify("minecraft:quartz_block"));
         assertEquals("glass", CategoryPolicy.classify("minecraft:red_stained_glass_pane"));
@@ -187,7 +187,7 @@ public final class CategoryPolicyTest {
                         Integer.parseInt(columns[3]), actual.get(columns[0]).intValue());
             }
         }
-        assertEquals(43, manifestKeys.size());
+        assertEquals(42, manifestKeys.size());
         assertEquals(CategoryPolicy.categoryKeys(), manifestKeys);
     }
 }
