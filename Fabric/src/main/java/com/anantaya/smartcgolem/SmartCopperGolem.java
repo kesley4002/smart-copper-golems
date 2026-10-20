@@ -22,6 +22,7 @@ public class SmartCopperGolem implements ModInitializer {
     @Override
     public void onInitialize() {
         LOGGER.info("Copper Golems are smart now!");
+        com.anantaya.smartcgolem.animation.StretchManager.initialize();
         LOGGER.info("Category catalog ready: {} item IDs across {} categories",
                 CategoryPolicy.all().size(), CategoryPolicy.categoryKeys().size());
 
