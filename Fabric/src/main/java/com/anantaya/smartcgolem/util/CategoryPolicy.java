@@ -24,7 +24,7 @@ public final class CategoryPolicy {
     private CategoryPolicy() {}
 
     public static final int EXPECTED_ITEMS = 1413;
-    public static final int EXPECTED_CATEGORIES = 30;
+    public static final int EXPECTED_CATEGORIES = 35;
 
     private static final String RESOURCE = "/smart-copper-golem/category-index.tsv";
     private static final Map<String, String> ITEM_TO_CATEGORY = loadCatalog();
