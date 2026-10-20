@@ -1,9 +1,9 @@
 name: Fabric prototype validation
 on:
   push:
-    branches: ['feature/smart-categories-26.2', 'feature/ai-optimization-26.2', 'feature/barrel-support-26.2', 'feature/catalog-30-categories-26.2', 'feature/alphabetical-container-sorting-26.2']
+    branches: ['feature/smart-categories-26.2', 'feature/ai-optimization-26.2', 'feature/barrel-support-26.2', 'feature/catalog-30-categories-26.2', 'feature/alphabetical-container-sorting-26.2', 'feature/food-language-26.2']
   pull_request:
-    branches: ['v-26.2', 'feature/smart-categories-26.2', 'feature/ai-optimization-26.2', 'feature/barrel-support-26.2', 'feature/catalog-30-categories-26.2']
+    branches: ['v-26.2', 'feature/smart-categories-26.2', 'feature/ai-optimization-26.2', 'feature/barrel-support-26.2', 'feature/catalog-30-categories-26.2', 'feature/alphabetical-container-sorting-26.2']
   workflow_dispatch:
 permissions:
   contents: read
@@ -52,8 +52,17 @@ jobs:
               key, label, old_sections, count = line.split('\t')
               assert key not in expected, key
               expected[key] = int(count)
-          assert len(tally) == len(expected) == 30, (len(tally), len(expected))
+          assert len(tally) == len(expected) == 35, (len(tally), len(expected))
           assert tally == expected, ('manifest mismatch', tally, expected)
+          with zipfile.ZipFile(jars[0]) as z:
+              translations = z.read('smart-copper-golem/item-names-pt_br.tsv').decode('utf-8')
+          localized = [line.split('\t', 1) for line in translations.splitlines()
+                       if line and not line.startswith('#')]
+          assert len(localized) == 1413, len(localized)
+          assert len({row[0] for row in localized}) == 1413
+          assert all(len(row) == 2 and row[1].strip() for row in localized)
+          assert {row[0] for row in localized} == {row[0] for row in entries}
+          print('Verified full PT-BR translation coverage: 1413 items')
           print('Verified', len(entries), 'unique items and', len(tally), 'categories in', jars[0])
           PY
       - uses: actions/upload-artifact@v7

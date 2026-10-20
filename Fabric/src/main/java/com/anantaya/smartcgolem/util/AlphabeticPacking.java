@@ -19,6 +19,12 @@ public final class AlphabeticPacking {
 
     public static <T> List<Entry<T>> compactAndSort(
             List<Entry<T>> input, BiPredicate<T, T> compatible) {
+        return compactAndSort(input, compatible, Comparator.naturalOrder());
+    }
+
+    public static <T> List<Entry<T>> compactAndSort(
+            List<Entry<T>> input, BiPredicate<T, T> compatible,
+            Comparator<String> languageOrder) {
         List<Entry<T>> output = new ArrayList<>();
 
         for (Entry<T> stack : input) {
@@ -38,7 +44,7 @@ public final class AlphabeticPacking {
             }
         }
         // List.sort is stable: the original order of variants with equal IDs is preserved.
-        output.sort(Comparator.comparing(Entry::itemId));
+        output.sort(Comparator.comparing(Entry<T>::itemId, languageOrder));
         return List.copyOf(output);
     }
 }
