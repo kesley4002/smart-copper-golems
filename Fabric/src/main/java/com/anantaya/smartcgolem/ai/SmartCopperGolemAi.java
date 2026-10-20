@@ -34,7 +34,8 @@ public class SmartCopperGolemAi {
 
     private static final Predicate<BlockState> TRANSPORT_ITEM_DESTINATION_BLOCK =
             block -> block.is(Blocks.CHEST)
-                    || block.is(Blocks.TRAPPED_CHEST);
+                    || block.is(Blocks.TRAPPED_CHEST)
+                    || block.is(Blocks.BARREL);
 
     public static List<ActivityData<CopperGolem>> getActivities() {
 
