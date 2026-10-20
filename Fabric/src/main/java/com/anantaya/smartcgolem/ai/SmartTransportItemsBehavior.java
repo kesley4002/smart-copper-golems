@@ -6,6 +6,7 @@ import com.anantaya.smartcgolem.util.SearchVolume;
 import com.anantaya.smartcgolem.ServerWorkZoneSettings;
 import com.anantaya.smartcgolem.util.ItemFrameHelper;
 import com.anantaya.smartcgolem.util.StorageFrameIndex;
+import com.anantaya.smartcgolem.util.GolemRoutingRules;
 import com.anantaya.smartcgolem.ServerCarrySettings;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -932,7 +933,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
             if (chest == null) continue;
             FrameFilterResult filter = getFrameFilterResult(level, pos, held);
-            if (!filter.hasFrame() || !filter.matchesHeld()) continue;
+            if (!GolemRoutingRules.accepts(filter.hasFrame(), filter.matchesHeld(), false)) continue;
             Container actual = getActualContainer(level, pos, chest);
             if (hasSpaceFor(actual, held)) continue;
             double pathCost = getPathCost(mob, pos);
@@ -1025,7 +1026,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
             if (!stack.isEmpty()) {
 
-                int takeAmount = Math.min(Math.min(stack.getCount(), stack.getMaxStackSize()), ServerCarrySettings.maximum());
+                int takeAmount = GolemRoutingRules.amountToCarry(stack.getCount(), stack.getMaxStackSize(), ServerCarrySettings.maximum());
                 ItemStack taken = stack.copyWithCount(takeAmount);
 
                 System.out.println("[SMART-GOLEM PICKUP BEFORE] tick=" + level.getGameTime()
@@ -1070,8 +1071,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         FrameFilterResult filter = getFrameFilterResult(level, chestPos, held);
         // Never deposit into an empty/unframed destination, even if the
         // user removes its moldura between path selection and insertion.
-        if (!filter.hasFrame() || !filter.matchesHeld()
-                || ItemFrameHelper.hasSourceMarker(level, chestPos)) return held.copy();
+        if (!GolemRoutingRules.accepts(filter.hasFrame(), filter.matchesHeld(),
+                ItemFrameHelper.hasSourceMarker(level, chestPos))) return held.copy();
         ItemStack remaining = held.copy();
 
         for (int i = 0; i < chest.getContainerSize(); i++) {
@@ -1317,7 +1318,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         }
         // Underground chests must be reached via real paths (e.g. stairs);
         // do not teleport inventory vertically through a solid floor.
-        if (currentTarget != null && currentTarget.getY() < mob.blockPosition().getY() - 2) {
+        if (currentTarget != null && !GolemRoutingRules.remoteDepositMayCrossHeight(
+                    currentTarget.getY(), mob.blockPosition().getY())) {
             return false;
         }
 
