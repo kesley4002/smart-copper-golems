@@ -35,8 +35,10 @@ public final class ServerWorkZoneSettings {
     public static int halfWidth() { return width / 2; }
 
     public static boolean contains(BlockPos center, BlockPos pos) {
-        return Math.abs((long)center.getX() - pos.getX()) <= halfWidth()
-            && Math.abs((long)center.getZ() - pos.getZ()) <= halfWidth();
+        long dx = (long)pos.getX() - center.getX();
+        long dz = (long)pos.getZ() - center.getZ();
+        return dx >= -halfWidth() && dx < halfWidth()
+                && dz >= -halfWidth() && dz < halfWidth();
     }
 
     public static BlockPos anchor(CopperGolem golem) {
