@@ -1,0 +1,29 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Smart Copper Golems Extended — Bedrock visuals",
+    "description": "Copper Golem dynamic stretching visuals for Geyser-Fabric; no behavior pack.",
+    "uuid": "77582d76-2f22-430e-b729-65ae6f215bc2",
+    "version": [
+      0,
+      9,
+      8
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      0
+    ]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "4c2e59b0-bcd6-4d9d-9223-a1c4d538b76b",
+      "version": [
+        0,
+        9,
+        8
+      ]
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "format_version": "1.8.0",
+  "animations": {
+    "animation.smart_copper_golem.reach": {
+      "loop": true,
+      "bones": {
+        "body": {
+          "position": [
+            "0",
+            "v.scg_reach <= 0.07920792 ? v.scg_reach * 113.625 : (v.scg_reach <= 0.83168317 ? 9 + (v.scg_reach - 0.07920792) * 46.509 : 44 + (v.scg_reach - 0.83168317) * 118.81)",
+            "0"
+          ],
+          "scale": [
+            "1",
+            "v.scg_reach <= 0.07920792 ? 1 - v.scg_reach * 2.525 : (v.scg_reach <= 0.83168317 ? 0.8 : 0.8 + (v.scg_reach - 0.83168317) * 1.188)",
+            "1"
+          ]
+        },
+        "right_leg": {
+          "position": [
+            "0",
+            "v.scg_reach <= 0.07920792 ? v.scg_reach * 113.625 : (v.scg_reach <= 0.83168317 ? 9 + (v.scg_reach - 0.07920792) * 46.509 : 44 + (v.scg_reach - 0.83168317) * 118.81)",
+            "0"
+          ],
+          "scale": [
+            "1",
+            "v.scg_reach <= 0.07920792 ? 1 + v.scg_reach * 22.725 : (v.scg_reach <= 0.83168317 ? 2.8 + (v.scg_reach - 0.07920792) * 9.302 : 9.8 + (v.scg_reach - 0.83168317) * 23.762)",
+            "1"
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ]
+        },
+        "left_leg": {
+          "position": [
+            "0",
+            "v.scg_reach <= 0.07920792 ? v.scg_reach * 113.625 : (v.scg_reach <= 0.83168317 ? 9 + (v.scg_reach - 0.07920792) * 46.509 : 44 + (v.scg_reach - 0.83168317) * 118.81)",
+            "0"
+          ],
+          "scale": [
+            "1",
+            "v.scg_reach <= 0.07920792 ? 1 + v.scg_reach * 22.725 : (v.scg_reach <= 0.83168317 ? 2.8 + (v.scg_reach - 0.07920792) * 9.302 : 9.8 + (v.scg_reach - 0.83168317) * 23.762)",
+            "1"
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    }
+  }
+}
