@@ -605,7 +605,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             return;
         }
 
-        if (ticksAtTarget < 9) {
+        // Accessible chest lids previously closed in only eight ticks.
+        // Give the vanilla lid time to open before the deposit completes.
+        // Barrels keep their previously validated timing and sounds.
+        int interactDelay = chest instanceof ChestBlockEntity
+                ? REMOTE_CHEST_LID_OPEN_TICKS + 1 : 9;
+        if (ticksAtTarget < interactDelay) {
             return;
         }
 
