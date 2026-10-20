@@ -3,7 +3,10 @@
 	"package": "com.anantaya.smartcgolem.client.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
-	],
+        "CopperGolemRenderStateMixin",
+        "CopperGolemRendererMixin",
+        "CopperGolemModelMixin"
+    ],
 	"injectors": {
 		"defaultRequire": 1
 	},

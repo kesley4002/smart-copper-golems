@@ -18,10 +18,14 @@
   "entrypoints": {
     "main": [
       "com.anantaya.smartcgolem.SmartCopperGolem"
+    ],
+    "client": [
+      "com.anantaya.smartcgolem.client.ClientStretchAnimations"
     ]
   },
   "mixins": [
-    "smart-copper-golem.mixins.json"
+    "smart-copper-golem.mixins.json",
+    "smart-copper-golem.client.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.19.3",

@@ -46,6 +46,9 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
+    private long stretchStageStartTick = -1L;
+    private boolean stretchActive = false;
+    private BlockPos stretchedChestTarget;
 
     private enum TaskState {
         IDLE,
@@ -56,6 +59,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         WAIT_FOR_DESTINATION,
         INTERACT_DESTINATION,
         REMOTE_CLOSE,
+        STRETCH_GROW,
+        STRETCH_SHRINK,
         RETURN_TO_SOURCE
     }
 
@@ -123,7 +128,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             int verticalSearchDistance,
             Consumer<PathfinderMob> onTravelling
     ) {
-        super(ImmutableMap.of(), 200);
+        // A complete remote stretch includes 100 ticks of stuck detection,
+        // 101 ticks growing, chest animation and 101 ticks shrinking.
+        // Prevent vanilla Behavior timeout from interrupting midway.
+        super(ImmutableMap.of(), 1200);
 
         this.speedModifier = speedModifier;
         this.sourceBlockType = sourceBlockType;
@@ -148,6 +156,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         actionDone = false;
         ticksAtTarget = 0;
         taskState = TaskState.IDLE;
+        stretchActive = false;
+        stretchedChestTarget = null;
         unlockChest();
 
         if (!carrying) {
@@ -341,6 +351,43 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
             case INTERACT_DESTINATION -> interactWithDestination(level, mob, gameTime);
 
+            case STRETCH_GROW -> {
+                mob.getNavigation().stop();
+                if (currentTarget != null) mob.getLookControl().setLookAt(
+                        currentTarget.getX()+.5, currentTarget.getY()+.5, currentTarget.getZ()+.5);
+                long elapsed = gameTime - stretchStageStartTick;
+                if (mob instanceof CopperGolem copper && elapsed % 20 == 0)
+                    com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
+                            com.anantaya.smartcgolem.animation.StretchManager.GROW, (int)Math.min(elapsed,101L));
+                if (elapsed >= com.anantaya.smartcgolem.animation.StretchManager.DURATION) {
+                    if (mob instanceof CopperGolem copper)
+                        com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
+                                com.anantaya.smartcgolem.animation.StretchManager.HOLD, 0);
+                    // Interaction only after the visual growth has completed.
+                    if (!magicDepositIntoMatchedChest(level, mob, gameTime)) {
+                        startShrink(level, mob, gameTime);
+                    } else if (taskState != TaskState.REMOTE_CLOSE) {
+                        startShrink(level, mob, gameTime);
+                    }
+                }
+            }
+
+            case STRETCH_SHRINK -> {
+                mob.getNavigation().stop();
+                long elapsed = gameTime - stretchStageStartTick;
+                if (mob instanceof CopperGolem copper && elapsed % 20 == 0)
+                    com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
+                            com.anantaya.smartcgolem.animation.StretchManager.SHRINK, (int)Math.min(elapsed,101L));
+                if (elapsed >= com.anantaya.smartcgolem.animation.StretchManager.DURATION) {
+                    if (mob instanceof CopperGolem copper)
+                        com.anantaya.smartcgolem.animation.StretchManager.stop(level, copper);
+                    stretchActive = false;
+                    BlockPos previousTarget = stretchedChestTarget;
+                    stretchedChestTarget = null;
+                    continueAfterRemoteDeposit(level, mob, gameTime, previousTarget);
+                }
+            }
+
             case REMOTE_CLOSE -> {
                 // Native opener state and sound must persist across ticks:
                 // startOpen+stopOpen in the same tick would not visibly animate.
@@ -360,7 +407,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 if (gameTime >= remoteCloseAt) {
                     closeOpenedContainer();
                     unlockChest();
-                    continueAfterRemoteDeposit(level, mob, gameTime, currentTarget);
+                    if (stretchActive) startShrink(level, mob, gameTime);
+                    else continueAfterRemoteDeposit(level, mob, gameTime, currentTarget);
                 }
             }
 
@@ -1262,6 +1310,11 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     protected void stop(@NonNull ServerLevel level, PathfinderMob mob, long gameTime) {
         closeOpenedContainer();
         unlockChest();
+        if (mob instanceof CopperGolem copper) {
+            com.anantaya.smartcgolem.animation.StretchManager.stop(level, copper);
+        }
+        stretchActive = false;
+        stretchedChestTarget = null;
 
         ticksAtTarget = 0;
         actionDone = false;
@@ -1365,7 +1418,28 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 + " distanceSqr=" + currentDistance
                 + " bestDistanceSqr=" + closestDistanceToWalkTargetSqr);
 
+        if (mob instanceof CopperGolem copper
+                && currentTarget != null && currentTarget.getY() > mob.blockPosition().getY()+1) {
+            stretchActive = true;
+            stretchedChestTarget = currentTarget.immutable();
+            stretchStageStartTick = gameTime;
+            taskState = TaskState.STRETCH_GROW;
+            mob.getNavigation().stop();
+            com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
+                    com.anantaya.smartcgolem.animation.StretchManager.GROW, 0);
+            return true;
+        }
         return magicDepositIntoMatchedChest(level, mob, gameTime);
+    }
+
+    private void startShrink(ServerLevel level, PathfinderMob mob, long gameTime) {
+        if (!stretchActive) return;
+        stretchStageStartTick = gameTime;
+        taskState = TaskState.STRETCH_SHRINK;
+        mob.getNavigation().stop();
+        if (mob instanceof CopperGolem copper)
+            com.anantaya.smartcgolem.animation.StretchManager.set(level, copper,
+                    com.anantaya.smartcgolem.animation.StretchManager.SHRINK, 0);
     }
 
     private boolean magicDepositIntoMatchedChest(ServerLevel level, PathfinderMob mob, long gameTime) {
