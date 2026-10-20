@@ -3,6 +3,9 @@ package com.anantaya.smartcgolem.util;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
+import java.security.MessageDigest;
+import java.util.HexFormat;
+import java.util.TreeSet;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -28,6 +31,21 @@ public final class CategoryPolicyTest {
         }
         assertThrows(UnsupportedOperationException.class,
                 () -> catalog.put("minecraft:test", "minerals"));
+    }
+
+    @Test
+    public void exactOriginalCatalogMembershipFingerprintNeverDrifts() throws Exception {
+        // SHA-256 of the alphabetically sorted 1413 unique IDs from the
+        // user's original 61-section Java 26.2 Survival catalog, joined by LF.
+        // Detects swapping a missing item for another even when the total
+        // remains 1413 and all category totals look correct.
+        String allIds = String.join("\\n", new TreeSet<>(CategoryPolicy.all().keySet()));
+        String sha256 = HexFormat.of().formatHex(
+                MessageDigest.getInstance("SHA-256").digest(
+                        allIds.getBytes(StandardCharsets.UTF_8)));
+        assertEquals("The catalog must contain EXACTLY the user's 1413 original IDs",
+                "6e52a0750e4d09c8173380b48098ff4ad3327b349d273248d1f25362bd7d68ca",
+                sha256);
     }
 
     @Test
