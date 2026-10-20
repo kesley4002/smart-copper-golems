@@ -23,6 +23,14 @@ jobs:
       - uses: gradle/actions/wrapper-validation@v6
       - name: Compile and validate Fabric
         run: bash gradlew --no-daemon build
+      - name: Verify singleplayer and dedicated-server Fabric metadata
+        run: >-
+          python3 -c 'import json, pathlib, zipfile;
+          jars = [p for p in pathlib.Path("build/libs").glob("*.jar") if not p.name.endswith("-sources.jar")];
+          assert len(jars) == 1, jars;
+          meta = json.loads(zipfile.ZipFile(jars[0]).read("fabric.mod.json"));
+          assert meta["environment"] == "*", meta;
+          print("Fabric metadata allows singleplayer and dedicated server:", jars[0])'
       - uses: actions/upload-artifact@v7
         with:
           name: smart-copper-golems-extended-fabric-prototype
