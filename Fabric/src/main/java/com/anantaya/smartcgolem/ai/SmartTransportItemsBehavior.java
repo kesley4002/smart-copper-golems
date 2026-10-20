@@ -86,6 +86,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
     private BlockPos currentTarget = null;
     private BlockPos currentWalkTarget = null;
+    private BlockPos cachedHopGoal = null;
+    private BlockPos cachedHopTarget = null;
     private BlockPos lastPickupChest = null;
     private BlockPos returnToSourceChest = null;
     private ChestLockKey lockedChest = null;
@@ -400,12 +402,22 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         double dx = target.getX() - origin.getX();
         double dz = target.getZ() - origin.getZ();
         double distance = Math.hypot(dx, dz);
-        if (distance <= 20) return target;
+        if (distance <= 20) {
+            cachedHopGoal = null;
+            cachedHopTarget = null;
+            return target;
+        }
+        // Keep the waypoint fixed until the golem reaches it. Otherwise
+        // moving the waypoint every tick causes avoidable path recalculations.
+        if (target.equals(cachedHopGoal) && cachedHopTarget != null
+                && origin.distSqr(cachedHopTarget) > 9) return cachedHopTarget;
         double scale = 16.0 / distance;
-        return new BlockPos(
+        cachedHopGoal = target.immutable();
+        cachedHopTarget = new BlockPos(
                 origin.getX() + (int)Math.round(dx * scale),
                 origin.getY(),
                 origin.getZ() + (int)Math.round(dz * scale));
+        return cachedHopTarget;
     }
 
     private boolean hasArrived(PathfinderMob mob) {
