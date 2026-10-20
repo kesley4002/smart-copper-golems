@@ -15,14 +15,14 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-/** Full regression coverage of the user-curated 1413-ID, 40-category catalog. */
+/** Full regression coverage of the user-curated 1413-ID, 43-category catalog. */
 public final class CategoryPolicyTest {
     @Test
     public void allSurvivalItemsHaveExactlyOneKnownCategory() {
         Map<String, String> catalog = CategoryPolicy.all();
         assertEquals("Missing or extra catalog IDs", 1413, catalog.size());
-        assertEquals("Expected 40 categories", 40, CategoryPolicy.categoryKeys().size());
-        assertEquals(40, new HashSet<>(catalog.values()).size());
+        assertEquals("Expected 43 categories", 43, CategoryPolicy.categoryKeys().size());
+        assertEquals(43, new HashSet<>(catalog.values()).size());
         assertTrue(catalog.keySet().stream().allMatch(id -> id.startsWith("minecraft:")));
         assertTrue(catalog.values().stream().allMatch(c -> CategoryPolicy.categoryKeys().contains(c)));
         for (Map.Entry<String, String> item : catalog.entrySet()) {
@@ -89,7 +89,7 @@ public final class CategoryPolicyTest {
         assertEquals("lighting", CategoryPolicy.classify("minecraft:torch"));
         assertEquals("containers", CategoryPolicy.classify("minecraft:bucket"));
         assertEquals("music_archaeology", CategoryPolicy.classify("minecraft:music_disc_cat"));
-        assertEquals(40, CategoryPolicy.categoryKeys().size());
+        assertEquals(43, CategoryPolicy.categoryKeys().size());
     }
 
     @Test
@@ -105,6 +105,22 @@ public final class CategoryPolicyTest {
         assertEquals("redstone", CategoryPolicy.classify("minecraft:redstone_torch"));
         assertEquals("vegetation", CategoryPolicy.classify("minecraft:glow_lichen"));
         assertEquals("stone_construction", CategoryPolicy.classify("minecraft:cut_copper_stairs"));
+    }
+
+    @Test
+    public void dimensionBlocksSeparatedWithoutLosingObsidianFamily() {
+        assertEquals("nether_blocks", CategoryPolicy.classify("minecraft:nether_bricks"));
+        assertEquals("nether_blocks", CategoryPolicy.classify("minecraft:magma_block"));
+        assertEquals("nether_blocks", CategoryPolicy.classify("minecraft:crimson_nylium"));
+        assertEquals("end_blocks", CategoryPolicy.classify("minecraft:purpur_block"));
+        assertEquals("end_blocks", CategoryPolicy.classify("minecraft:chorus_flower"));
+        assertEquals("sculk_blocks", CategoryPolicy.classify("minecraft:sculk"));
+        assertEquals("sculk_blocks", CategoryPolicy.classify("minecraft:sculk_sensor"));
+        assertEquals("special_blocks", CategoryPolicy.classify("minecraft:obsidian"));
+        assertEquals("special_blocks", CategoryPolicy.classify("minecraft:crying_obsidian"));
+        assertEquals("special_blocks", CategoryPolicy.classify("minecraft:resin_block"));
+        assertEquals("special_blocks", CategoryPolicy.classify("minecraft:blue_ice"));
+        assertEquals("special_blocks", CategoryPolicy.classify("minecraft:snow_block"));
     }
 
     @Test
@@ -138,7 +154,7 @@ public final class CategoryPolicyTest {
         assertEquals("food_raw_vegetables", CategoryPolicy.classify("minecraft:potato"));
         assertEquals("food_fruit", CategoryPolicy.classify("minecraft:glow_berries"));
         assertEquals("potions_alchemy", CategoryPolicy.classify("minecraft:glistering_melon_slice"));
-        assertEquals("special_blocks", CategoryPolicy.classify("minecraft:popped_chorus_fruit"));
+        assertEquals("end_blocks", CategoryPolicy.classify("minecraft:popped_chorus_fruit"));
         assertEquals("mob_drops", CategoryPolicy.classify("minecraft:rotten_flesh"));
         assertEquals("agriculture", CategoryPolicy.classify("minecraft:sugar"));
         assertEquals("portable_storage", CategoryPolicy.classify("minecraft:shulker_box"));
@@ -171,7 +187,7 @@ public final class CategoryPolicyTest {
                         Integer.parseInt(columns[3]), actual.get(columns[0]).intValue());
             }
         }
-        assertEquals(40, manifestKeys.size());
+        assertEquals(43, manifestKeys.size());
         assertEquals(CategoryPolicy.categoryKeys(), manifestKeys);
     }
 }

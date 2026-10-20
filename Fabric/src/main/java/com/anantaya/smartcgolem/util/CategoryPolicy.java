@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Exact, immutable 1413-item / 40-category lookup generated from the curated
+ * Exact, immutable 1413-item / 43-category lookup generated from the curated
  * Survival Vanilla catalog. No broad heuristics that could accidentally accept
  * unknown items or overlap categories.
  *
@@ -24,7 +24,7 @@ public final class CategoryPolicy {
     private CategoryPolicy() {}
 
     public static final int EXPECTED_ITEMS = 1413;
-    public static final int EXPECTED_CATEGORIES = 40;
+    public static final int EXPECTED_CATEGORIES = 43;
 
     private static final String RESOURCE = "/smart-copper-golem/category-index.tsv";
     private static final Map<String, String> ITEM_TO_CATEGORY = loadCatalog();
