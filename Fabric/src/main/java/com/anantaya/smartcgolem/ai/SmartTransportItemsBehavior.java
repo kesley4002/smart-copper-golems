@@ -2,6 +2,7 @@
 package com.anantaya.smartcgolem.ai;
 
 import com.google.common.collect.ImmutableMap;
+import com.anantaya.smartcgolem.util.SearchVolume;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
@@ -682,11 +683,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     }
 
     /**
-     * Collects all candidate positions matching the predicate/filter within
-     * the search box, sorted by cheap squared-distance (closest first).
-     * Real pathfinding (getPathCost) is only ever evaluated for these
-     * candidates in distance order, and we stop as soon as one is reachable
-     * and accepted — avoiding O(volume * 27) pathfinding calls.
+     * Enumerate ONLY loaded chunk block-entity positions instead of probing
+     * all 65 x 17 x 65 (71,825) world blocks every time a golem searches.
+     *
+     * Both copper and regular chests own block entities; preserving the same
+     * inclusive range and nearest-first ordering keeps sorting behaviour.
+     * getChunkNow never force-loads chunks while the golem searches.
      */
     private java.util.List<BlockPos> collectCandidates(
             ServerLevel level,
@@ -694,26 +696,28 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             Predicate<BlockState> blockType
     ) {
         BlockPos mobPos = mob.blockPosition();
+        SearchVolume area = new SearchVolume(
+                mobPos.getX(), mobPos.getY(), mobPos.getZ(),
+                horizontalSearchDistance, verticalSearchDistance
+        );
         java.util.List<BlockPos> candidates = new java.util.ArrayList<>();
 
-        for (int x = -horizontalSearchDistance; x <= horizontalSearchDistance; x++) {
-            for (int y = -verticalSearchDistance; y <= verticalSearchDistance; y++) {
-                for (int z = -horizontalSearchDistance; z <= horizontalSearchDistance; z++) {
+        for (int cx = area.minChunkX(); cx <= area.maxChunkX(); cx++) {
+            for (int cz = area.minChunkZ(); cz <= area.maxChunkZ(); cz++) {
+                // The sorter should not load chunks just to search for storage.
+                var chunk = level.getChunkSource().getChunkNow(cx, cz);
+                if (chunk == null) continue;
 
-                    BlockPos pos = mobPos.offset(x, y, z);
-                    BlockState state = level.getBlockState(pos);
-
-                    if (!blockType.test(state)) {
-                        continue;
-                    }
-
+                for (BlockPos pos : chunk.getBlockEntitiesPos()) {
+                    if (!area.contains(pos.getX(), pos.getY(), pos.getZ())) continue;
+                    BlockState state = chunk.getBlockState(pos);
+                    if (!blockType.test(state)) continue;
                     candidates.add(pos.immutable());
                 }
             }
         }
 
         candidates.sort((a, b) -> Double.compare(getRoughDistance(mob, a), getRoughDistance(mob, b)));
-
         return candidates;
     }
 
