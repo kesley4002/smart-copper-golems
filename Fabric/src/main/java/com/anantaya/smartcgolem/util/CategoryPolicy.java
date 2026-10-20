@@ -13,18 +13,18 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Exact, immutable 1413-item / 30-category lookup generated from the curated
+ * Exact, immutable 1413-item / 38-category lookup generated from the curated
  * Survival Vanilla catalog. No broad heuristics that could accidentally accept
  * unknown items or overlap categories.
  *
- * A 45-degree frame uses this category for BOTH the representative and the
+ * An upright 0-degree frame uses this category for BOTH the representative and the
  * item the golem is carrying; all other frame rotations use exact-item logic.
  */
 public final class CategoryPolicy {
     private CategoryPolicy() {}
 
     public static final int EXPECTED_ITEMS = 1413;
-    public static final int EXPECTED_CATEGORIES = 34;
+    public static final int EXPECTED_CATEGORIES = 38;
 
     private static final String RESOURCE = "/smart-copper-golem/category-index.tsv";
     private static final Map<String, String> ITEM_TO_CATEGORY = loadCatalog();

@@ -52,7 +52,7 @@ public final class ItemFrameHelper {
     /**
      * A non-rotated stick marks a normal chest / double chest / barrel as an
      * INPUT. All frame faces of a barrel and both halves of a real double
-     * chest are recognized. A rotated stick is still a category filter.
+     * chest are recognized. A rotated stick is an exact-item filter.
      */
     public static boolean hasSourceMarker(ServerLevel level, BlockPos pos) {
         return frames(level, pos).stream().anyMatch(frame ->
@@ -70,8 +70,12 @@ public final class ItemFrameHelper {
         ItemStack exactItem = ItemStack.EMPTY;
         for (ItemFrame frame : frames) {
             ItemStack sample = frame.getItem();
-            // Explicit opt-in: any item frame rotated once (45 degrees).
-            if (frame.getRotation() == 1) {
+            // Visually aligned frames (0°) select a category. Reserve an
+            // unrotated stick for the source marker; never use it as a filter.
+            if (sample.is(Items.STICK) && frame.getRotation() == 0) {
+                continue;
+            }
+            if (frame.getRotation() == 0) {
                 String category = SmartCategories.category(sample);
                 // Unknown representative or competing categories: reject, never fallback.
                 if (category == null || (hasCategory && !Objects.equals(selectedCategory, category))) {
@@ -80,7 +84,7 @@ public final class ItemFrameHelper {
                 hasCategory = true;
                 selectedCategory = category;
                 representative = sample;
-            } else if (!held.isEmpty() && ItemStack.isSameItemSameComponents(sample, held)) {
+            } else if (frame.getRotation() == 1 && !held.isEmpty() && ItemStack.isSameItemSameComponents(sample, held)) {
                 exactMatch = true;
                 exactItem = sample;
             }
@@ -90,6 +94,7 @@ public final class ItemFrameHelper {
             boolean matches = !held.isEmpty() && selectedCategory.equals(SmartCategories.category(held));
             return new FilterResult(true, matches, representative.copy());
         }
+        // An unrotated source stick is never a destination filter.
         return new FilterResult(!frames.isEmpty(), exactMatch, exactItem.copy());
     }
 
