@@ -1,9 +1,9 @@
 name: Fabric prototype validation
 on:
   push:
-    branches: ['feature/smart-categories-26.2', 'feature/ai-optimization-26.2', 'feature/barrel-support-26.2']
+    branches: ['feature/smart-categories-26.2', 'feature/ai-optimization-26.2', 'feature/barrel-support-26.2', 'feature/catalog-30-categories-26.2']
   pull_request:
-    branches: ['v-26.2', 'feature/smart-categories-26.2', 'feature/ai-optimization-26.2']
+    branches: ['v-26.2', 'feature/smart-categories-26.2', 'feature/ai-optimization-26.2', 'feature/barrel-support-26.2']
   workflow_dispatch:
 permissions:
   contents: read
@@ -31,6 +31,31 @@ jobs:
           meta = json.loads(zipfile.ZipFile(jars[0]).read("fabric.mod.json"));
           assert meta["environment"] == "*", meta;
           print("Fabric metadata allows singleplayer and dedicated server:", jars[0])'
+      - name: Validate all 1413 catalog entries packaged into Fabric JAR
+        run: |
+          python3 - <<'PY'
+          import collections, pathlib, zipfile
+          jars = [p for p in pathlib.Path('build/libs').glob('*.jar') if not p.name.endswith('-sources.jar')]
+          assert len(jars) == 1, jars
+          with zipfile.ZipFile(jars[0]) as z:
+              index = z.read('smart-copper-golem/category-index.tsv').decode('utf-8')
+              manifest = z.read('smart-copper-golem/category-manifest.tsv').decode('utf-8')
+          entries = [line.split('\t') for line in index.splitlines() if line and not line.startswith('#')]
+          assert len(entries) == 1413, ('wrong item count', len(entries))
+          assert all(len(row) == 2 and row[0].startswith('minecraft:') for row in entries)
+          assert len({row[0] for row in entries}) == 1413, 'duplicate item IDs'
+          tally = collections.Counter(row[1] for row in entries)
+          expected = {}
+          for line in manifest.splitlines():
+              if not line or line.startswith('#'):
+                  continue
+              key, label, old_sections, count = line.split('\t')
+              assert key not in expected, key
+              expected[key] = int(count)
+          assert len(tally) == len(expected) == 30, (len(tally), len(expected))
+          assert tally == expected, ('manifest mismatch', tally, expected)
+          print('Verified', len(entries), 'unique items and', len(tally), 'categories in', jars[0])
+          PY
       - uses: actions/upload-artifact@v7
         with:
           name: smart-copper-golems-extended-fabric-prototype
