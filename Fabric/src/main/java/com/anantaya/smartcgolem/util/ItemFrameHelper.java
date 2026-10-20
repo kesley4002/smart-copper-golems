@@ -8,6 +8,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.ChestType;
@@ -46,6 +47,16 @@ public final class ItemFrameHelper {
             }
         }
         return result;
+    }
+
+    /**
+     * A non-rotated stick marks a normal chest / double chest / barrel as an
+     * INPUT. All frame faces of a barrel and both halves of a real double
+     * chest are recognized. A rotated stick is still a category filter.
+     */
+    public static boolean hasSourceMarker(ServerLevel level, BlockPos pos) {
+        return frames(level, pos).stream().anyMatch(frame ->
+                frame.getRotation() == 0 && frame.getItem().is(Items.STICK));
     }
 
     public record FilterResult(boolean hasFrame, boolean matchesHeld, ItemStack matchedFrameItem) {}

@@ -3,6 +3,8 @@ package com.anantaya.smartcgolem.ai;
 
 import com.google.common.collect.ImmutableMap;
 import com.anantaya.smartcgolem.util.SearchVolume;
+import com.anantaya.smartcgolem.ServerWorkZoneSettings;
+import com.anantaya.smartcgolem.util.ItemFrameHelper;
 import com.anantaya.smartcgolem.util.ContainerAlphabetizer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
@@ -84,6 +86,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
     private BlockPos currentTarget = null;
     private BlockPos currentWalkTarget = null;
+    private BlockPos cachedHopGoal = null;
+    private BlockPos cachedHopTarget = null;
     private BlockPos lastPickupChest = null;
     private BlockPos returnToSourceChest = null;
     private ChestLockKey lockedChest = null;
@@ -97,7 +101,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private long nextSearchTick = 0;
 
     private static final int ARRIVAL_DISTANCE_SQUARED = 4;
-    private static final int SEARCH_COOLDOWN_TICKS = 20;
+    // Wider work zones are scanned only once every 5 seconds per golem.
+    private static final int SEARCH_COOLDOWN_TICKS = 100;
 
     public SmartTransportItemsBehavior(
             float speedModifier,
@@ -277,9 +282,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     return;
                 }
 
-                BlockEntity blockEntity = level.getBlockEntity(currentTarget);
+                BaseContainerBlockEntity chest = getSourceBlockEntity(level, currentTarget);
 
-                if (!(blockEntity instanceof ChestBlockEntity chest)) {
+                if (chest == null) {
                     switchState(mob, TaskState.IDLE, null, gameTime);
                     return;
                 }
@@ -380,12 +385,39 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             return;
         }
 
+        // Minecraft navigation has a much shorter practical path range
+        // than the configured 500-block work square. Travel in short hops
+        // towards distant storage, while retaining the actual target for
+        // arrival checks and the existing stuck/magic-deposit logic.
         BehaviorUtils.setWalkAndLookTargetMemories(
                 mob,
-                currentWalkTarget,
+                shortHop(mob, currentWalkTarget),
                 speedModifier,
                 0
         );
+    }
+
+    private BlockPos shortHop(PathfinderMob mob, BlockPos target) {
+        BlockPos origin = mob.blockPosition();
+        double dx = target.getX() - origin.getX();
+        double dz = target.getZ() - origin.getZ();
+        double distance = Math.hypot(dx, dz);
+        if (distance <= 20) {
+            cachedHopGoal = null;
+            cachedHopTarget = null;
+            return target;
+        }
+        // Keep the waypoint fixed until the golem reaches it. Otherwise
+        // moving the waypoint every tick causes avoidable path recalculations.
+        if (target.equals(cachedHopGoal) && cachedHopTarget != null
+                && origin.distSqr(cachedHopTarget) > 9) return cachedHopTarget;
+        double scale = 16.0 / distance;
+        cachedHopGoal = target.immutable();
+        cachedHopTarget = new BlockPos(
+                origin.getX() + (int)Math.round(dx * scale),
+                origin.getY(),
+                origin.getZ() + (int)Math.round(dz * scale));
+        return cachedHopTarget;
     }
 
     private boolean hasArrived(PathfinderMob mob) {
@@ -469,9 +501,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             return;
         }
 
-        BlockEntity blockEntity = level.getBlockEntity(currentTarget);
+        BaseContainerBlockEntity chest = getSourceBlockEntity(level, currentTarget);
 
-        if (!(blockEntity instanceof ChestBlockEntity chest)) {
+        if (chest == null) {
             System.out.println("[SMART-GOLEM ERROR] Source target is not ChestBlockEntity at " + currentTarget);
             closeOpenedContainer();
             switchState(mob, TaskState.IDLE, null, gameTime);
@@ -568,7 +600,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         BaseContainerBlockEntity chest = getDestinationBlockEntity(level, currentTarget);
 
-        if (chest == null) {
+        if (chest == null || ItemFrameHelper.hasSourceMarker(level, currentTarget)) {
             System.out.println("[SMART-GOLEM ERROR] Destination target is not a supported chest/barrel at " + currentTarget);
             closeOpenedContainer();
             switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);
@@ -711,6 +743,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         nextSearchTick = gameTime + SEARCH_COOLDOWN_TICKS;
 
         boolean carrying = !mob.getMainHandItem().isEmpty();
+        if (!carrying && mob instanceof CopperGolem golem && isNight(level)) {
+            returnHome(mob, golem);
+            return;
+        }
 
         BlockPos best = carrying
                 ? findDestinationChest(level, mob)
@@ -746,12 +782,15 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             Predicate<BlockState> blockType
     ) {
         BlockPos mobPos = mob.blockPosition();
+        BlockPos home = mob instanceof CopperGolem golem
+                ? ServerWorkZoneSettings.anchor(golem) : mobPos;
         SearchVolume area = new SearchVolume(
-                mobPos.getX(), mobPos.getY(), mobPos.getZ(),
-                horizontalSearchDistance, verticalSearchDistance
+                home.getX(), mobPos.getY(), home.getZ(),
+                ServerWorkZoneSettings.halfWidth(), verticalSearchDistance
         );
         java.util.List<BlockPos> candidates = new java.util.ArrayList<>();
 
+        // Local loaded chunks only: never ticket or load a distant chunk.
         for (int cx = area.minChunkX(); cx <= area.maxChunkX(); cx++) {
             for (int cz = area.minChunkZ(); cz <= area.maxChunkZ(); cz++) {
                 // The sorter should not load chunks just to search for storage.
@@ -759,7 +798,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 if (chunk == null) continue;
 
                 for (BlockPos pos : chunk.getBlockEntitiesPos()) {
-                    if (!area.contains(pos.getX(), pos.getY(), pos.getZ())) continue;
+                    if (!area.contains(pos.getX(), pos.getY(), pos.getZ())
+                            || !ServerWorkZoneSettings.contains(
+                                    home, pos)) continue;
                     BlockState state = chunk.getBlockState(pos);
                     if (!blockType.test(state)) continue;
                     candidates.add(pos.immutable());
@@ -773,23 +814,15 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
     private BlockPos findSourceChest(ServerLevel level, PathfinderMob mob) {
 
-        for (BlockPos pos : collectCandidates(level, mob, sourceBlockType)) {
+        for (BlockPos pos : collectCandidates(level, mob, state -> sourceBlockType.test(state) || destinationBlockType.test(state))) {
 
-            BlockEntity blockEntity = level.getBlockEntity(pos);
+            BaseContainerBlockEntity chest = getSourceBlockEntity(level, pos);
+            if (chest == null || !hasAnyItem(getActualContainer(level, pos, chest))) continue;
 
-            if (!(blockEntity instanceof ChestBlockEntity chest)) {
-                continue;
-            }
-
-            if (!hasAnyItem(chest)) {
-                continue;
-            }
-
-            double pathCost = getPathCost(mob, pos);
-
-            if (pathCost == Double.MAX_VALUE) {
-                continue;
-            }
+            // Only require an immediate path when close. For distant
+            // marked inputs, the golem travels in navigation-sized hops.
+            if (mob.blockPosition().distSqr(pos) <= 24 * 24
+                    && getPathCost(mob, pos) == Double.MAX_VALUE) continue;
 
             return pos;
         }
@@ -812,7 +845,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         for (BlockPos pos : candidates) {
 
-            if (pos.equals(lastPickupChest)) {
+            if (pos.equals(lastPickupChest) || ItemFrameHelper.hasSourceMarker(level, pos)) {
                 continue;
             }
 
@@ -863,7 +896,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         for (BlockPos pos : candidates) {
 
-            if (pos.equals(lastPickupChest)) {
+            if (pos.equals(lastPickupChest) || ItemFrameHelper.hasSourceMarker(level, pos)) {
                 continue;
             }
 
@@ -899,7 +932,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         for (BlockPos pos : candidates) {
 
-            if (!pos.equals(lastPickupChest)) {
+            if (!pos.equals(lastPickupChest) || ItemFrameHelper.hasSourceMarker(level, pos)) {
                 continue;
             }
 
@@ -986,10 +1019,11 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         openedCopperGolem = null;
     }
 
-    private boolean pickupFromChest(ServerLevel level, PathfinderMob mob, ChestBlockEntity chest) {
+    private boolean pickupFromChest(ServerLevel level, PathfinderMob mob, BaseContainerBlockEntity chest) {
 
-        for (int i = 0; i < chest.getContainerSize(); i++) {
-            ItemStack stack = chest.getItem(i);
+        Container contents = getActualContainer(level, currentTarget, chest);
+        for (int i = 0; i < contents.getContainerSize(); i++) {
+            ItemStack stack = contents.getItem(i);
 
             if (!stack.isEmpty()) {
 
@@ -1003,7 +1037,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                         + " mobHand=" + mob.getMainHandItem());
 
                 stack.shrink(takeAmount);
-
+                contents.setChanged();
                 chest.setChanged();
                 level.blockEntityChanged(currentTarget);
 
@@ -1017,7 +1051,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 System.out.println("[SMART-GOLEM PICKUP AFTER] tick=" + level.getGameTime()
                         + " chest=" + currentTarget
                         + " slot=" + i
-                        + " remainingStack=" + chest.getItem(i)
+                        + " remainingStack=" + contents.getItem(i)
                         + " mobHand=" + mob.getMainHandItem());
 
                 return true;
@@ -1118,6 +1152,29 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         return !chest.getEntitiesWithContainerOpen().isEmpty();
     }
 
+    private BaseContainerBlockEntity getSourceBlockEntity(ServerLevel level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        BlockEntity entity = level.getBlockEntity(pos);
+        if (sourceBlockType.test(state) && entity instanceof ChestBlockEntity chest) return chest;
+        if (ItemFrameHelper.hasSourceMarker(level, pos)) return getDestinationBlockEntity(level, pos);
+        return null;
+    }
+
+    private boolean isNight(ServerLevel level) {
+        long t = Math.floorMod(level.getOverworldClockTime(), 24000L);
+        return t >= 13000L && t < 23000L;
+    }
+
+    private void returnHome(PathfinderMob mob, CopperGolem golem) {
+        BlockPos home = ServerWorkZoneSettings.anchor(golem);
+        if (mob.blockPosition().distSqr(home) > 9) {
+            BehaviorUtils.setWalkAndLookTargetMemories(mob,
+                    shortHop(mob, home), speedModifier, 2);
+        } else {
+            mob.getNavigation().stop();
+        }
+    }
+
     /** Copper chests remain sources; shulker boxes are not destinations. */
     private BaseContainerBlockEntity getDestinationBlockEntity(ServerLevel level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
@@ -1173,7 +1230,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         return true;
     }
 
-    private boolean hasAnyItem(ChestBlockEntity chest) {
+    private boolean hasAnyItem(Container chest) {
 
         for (int i = 0; i < chest.getContainerSize(); i++) {
             if (!chest.getItem(i).isEmpty()) {
@@ -1310,7 +1367,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         BaseContainerBlockEntity chest = getDestinationBlockEntity(level, depositTarget);
 
-        if (chest == null) {
+        if (chest == null || ItemFrameHelper.hasSourceMarker(level, depositTarget)) {
             System.out.println("[SMART-GOLEM MAGIC-DEPOSIT-CANCEL] Target is not a supported chest/barrel: " + depositTarget);
             markDestinationSelection(false, true);
             switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);

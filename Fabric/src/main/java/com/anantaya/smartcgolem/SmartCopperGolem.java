@@ -5,7 +5,10 @@ import com.anantaya.smartcgolem.util.SortLanguage;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
+import net.minecraft.world.entity.animal.golem.CopperGolem;
 import net.minecraft.commands.Commands;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.minecraft.server.permissions.Permissions;
 import net.minecraft.network.chat.Component;
 import org.slf4j.Logger;
@@ -22,14 +25,26 @@ public class SmartCopperGolem implements ModInitializer {
                 CategoryPolicy.all().size(), CategoryPolicy.categoryKeys().size());
 
         // The setting lives with the save, not with any individual client.
-        ServerLifecycleEvents.SERVER_STARTED.register(ServerSortSettings::load);
-        ServerLifecycleEvents.SERVER_STOPPED.register(server -> ServerSortSettings.reset());
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> { ServerSortSettings.load(server); ServerWorkZoneSettings.load(server); });
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> { ServerSortSettings.reset(); ServerWorkZoneSettings.reset(); });
+
+        // Capture each new golem's home as soon as it enters a server level.
+        // Previously seen golems keep their persisted UUID anchors.
+        ServerEntityEvents.ENTITY_LOAD.register((entity, world) -> {
+            if (entity instanceof CopperGolem golem) {
+                ServerWorkZoneSettings.anchor(golem);
+            }
+        });
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             // /scg language is namespaced for other mods; /language is the requested shortcut.
             dispatcher.register(Commands.literal("scg")
                     .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_MODERATOR))
-                    .then(languageNode()));
+                    .then(languageNode())
+                    .then(Commands.literal("radius")
+                        .executes(ctx -> showRadius(ctx.getSource()))
+                        .then(Commands.argument("width", IntegerArgumentType.integer(16,1000))
+                            .executes(ctx -> changeRadius(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "width"))))));
             dispatcher.register(Commands.literal("language")
                     .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_MODERATOR))
                     .executes(ctx -> showLanguage(ctx.getSource()))
@@ -46,6 +61,20 @@ public class SmartCopperGolem implements ModInitializer {
                 .then(Commands.literal("en").executes(ctx -> changeLanguage(ctx.getSource(), SortLanguage.Mode.EN)));
     }
 
+    private static int showRadius(net.minecraft.commands.CommandSourceStack src) {
+        src.sendSuccess(() -> Component.literal("Área de trabalho: " + ServerWorkZoneSettings.width() + " x " + ServerWorkZoneSettings.width() + " blocos."), false);
+        return 1;
+    }
+    private static int changeRadius(net.minecraft.commands.CommandSourceStack src, int width) {
+        if (width % 2 != 0) { src.sendFailure(Component.literal("Use uma largura par.")); return 0; }
+        try {
+            ServerWorkZoneSettings.setWidth(width);
+            src.sendSuccess(() -> Component.literal("Área quadrada: " + width + " x " + width + " blocos (" + width/2 + " de cada lado)."), true);
+            return 1;
+        } catch (java.io.IOException e) {
+            src.sendFailure(Component.literal("Falha ao salvar a configuração.")); return 0;
+        }
+    }
     private static int showLanguage(net.minecraft.commands.CommandSourceStack source) {
         source.sendSuccess(() -> Component.literal(
                 "Smart Copper Golems: idioma da ordenação = " + SortLanguage.current().name()), false);
