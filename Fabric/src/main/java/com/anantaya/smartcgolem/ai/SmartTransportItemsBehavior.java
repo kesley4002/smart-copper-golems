@@ -99,7 +99,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private long nextSearchTick = 0;
 
     private static final int ARRIVAL_DISTANCE_SQUARED = 4;
-    private static final int SEARCH_COOLDOWN_TICKS = 20;
+    // Wider work zones are scanned only once every 5 seconds per golem.
+    private static final int SEARCH_COOLDOWN_TICKS = 100;
 
     public SmartTransportItemsBehavior(
             float speedModifier,
@@ -760,6 +761,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         );
         java.util.List<BlockPos> candidates = new java.util.ArrayList<>();
 
+        // Local loaded chunks only: never ticket or load a distant chunk.
         for (int cx = area.minChunkX(); cx <= area.maxChunkX(); cx++) {
             for (int cz = area.minChunkZ(); cz <= area.maxChunkZ(); cz++) {
                 // The sorter should not load chunks just to search for storage.
