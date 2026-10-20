@@ -1,0 +1,31 @@
+# Category key TAB PT-BR display name TAB original catalog sections TAB expected number of IDs
+stone_blocks	Pedras brutas e trabalhadas	01,02,07	69
+stone_construction	Construção de pedra: escadas, lajes e muros	03,04,05	121
+soil	Terras, solos e cascalhos	06	14
+special_blocks	Blocos especiais e dimensionais	08,38,40	37
+minerals	Minérios, metais e cristais	09,10,11,39	58
+copper_building	Construções de cobre	12	47
+wood	Madeiras: troncos, tábuas, escadas e lajes	13,14,15	88
+wood_crafting	Marcenaria: portas, cercas, placas e prateleiras	16,17,18,19	109
+vegetation	Vegetação: folhas, mudas, flores, fungos e musgos	20,34,35,36	84
+glass	Vidros e painéis	21,22	35
+wool	Lãs e tapetes	23,24	32
+concrete	Concreto e pó de concreto	25,26	32
+terracotta	Terracotas comuns e vitrificadas	27,28	33
+dyes	Corantes	29	16
+colorful_decor	Decoração colorida: camas, velas e estandartes	30,31,32	59
+portable_storage	Armazenamento portátil: shulkers e bolsas	33	34
+aquatic	Corais e itens aquáticos	37	37
+agriculture	Agricultura: sementes e colheitas	41	15
+food	Alimentos	42,43	40
+mob_drops	Drops de mobs e tesouros	44,45,61	48
+redstone	Redstone e circuitos	46	26
+copper_machines	Maquinaria e acessórios de cobre	47	73
+transport	Transportes e montarias	48,49	62
+tools	Ferramentas e armas	50	51
+armor	Armaduras e moldes de ferraria	51,60	47
+enchantments	Livros, encantamentos, poções e navegação	52,53	29
+functional	Baús, bancadas e blocos funcionais	54,56	41
+lighting	Iluminação	55	14
+containers	Baldes e utilitários	57	17
+music_archaeology	Música e arqueologia	58,59	45
