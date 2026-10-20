@@ -769,7 +769,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 if (chunk == null) continue;
 
                 for (BlockPos pos : chunk.getBlockEntitiesPos()) {
-                    if (!area.contains(pos.getX(), pos.getY(), pos.getZ())) continue;
+                    if (!area.contains(pos.getX(), pos.getY(), pos.getZ())
+                            || !ServerWorkZoneSettings.contains(
+                                    home, pos)) continue;
                     BlockState state = chunk.getBlockState(pos);
                     if (!blockType.test(state)) continue;
                     candidates.add(pos.immutable());
