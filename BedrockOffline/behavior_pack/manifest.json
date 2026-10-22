@@ -1,13 +1,13 @@
 {
   "format_version": 2,
   "header": {
-    "name": "Smart Copper Golems — Offline (Behavior)",
+    "name": "Smart Copper Golems — Offline 0.1.1 (Behavior)",
     "description": "Survival-compatible sorting prototype with Script API. No Fabric or Geyser.",
     "uuid": "4d6731be-0ead-49b9-a233-70bb3aa7c725",
     "version": [
       0,
       1,
-      0
+      1
     ],
     "min_engine_version": [
       1,
@@ -22,7 +22,7 @@
       "version": [
         0,
         1,
-        0
+        1
       ]
     },
     {
@@ -33,7 +33,7 @@
       "version": [
         0,
         1,
-        0
+        1
       ]
     }
   ],
@@ -43,7 +43,7 @@
       "version": [
         0,
         1,
-        0
+        1
       ]
     },
     {

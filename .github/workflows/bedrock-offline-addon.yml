@@ -2,7 +2,7 @@ name: Build offline Bedrock add-on alpha
 
 on:
   push:
-    branches: [feature/bedrock-offline-addon-alpha]
+    branches: [feature/bedrock-offline-addon-alpha, feature/bedrock-offline-alpha-0.1.1-fix]
     paths:
       - 'BedrockOffline/**'
       - 'tools/build_bedrock_offline.py'
@@ -33,5 +33,5 @@ jobs:
         run: python tools/build_bedrock_offline.py
       - uses: actions/upload-artifact@v7
         with:
-          name: SmartCopperGolems_Offline_0.1.0_alpha
-          path: build/SmartCopperGolems_Offline_0.1.0_alpha.mcaddon
+          name: SmartCopperGolems_Offline_0.1.1_alpha
+          path: build/SmartCopperGolems_Offline_0.1.1_alpha.mcaddon

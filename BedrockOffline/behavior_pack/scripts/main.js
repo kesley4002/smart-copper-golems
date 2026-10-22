@@ -9,8 +9,9 @@
 import { world, system } from "@minecraft/server";
 import { CATEGORIES } from "./category-index.js";
 
-const SMART = "scg:smart_copper_golem";
-const VANILLA = "minecraft:copper_golem";
+const SMART = "minecraft:copper_golem";
+// We override the existing vanilla golem BP/RP directly, not a custom entity.
+// That means existing and newly made Copper Golems use the same script behavior.
 const HORIZONTAL_RADIUS = 9;
 const VERTICAL_RADIUS = 5;
 const INTERVAL = 2;
@@ -284,21 +285,20 @@ function update(mob) {
   if (s.phase === "done") reset(mob, s);
 }
 
-// Vanilla copper golems created in survival become the standalone smart entity.
-// Existing loaded copper golems are NOT force-converted; that protects old worlds.
-world.afterEvents.entitySpawn.subscribe(({ entity }) => {
-  if (entity.typeId !== VANILLA) return;
-  system.run(() => {
+// Confirm to players that BOTH Bedrock packs are enabled in this world.
+console.warn("[SCG Offline 0.1.1] Script loaded. Vanilla Copper Golem AI enabled.");
+world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
+  if (!initialSpawn) return;
+  system.runTimeout(() => {
     try {
-      if (!entity.isValid) return;
-      const replacement = entity.dimension.spawnEntity(SMART, entity.location);
-      const oxidation = entity.getProperty("minecraft:oxidation_level");
-      if (typeof oxidation === "string") replacement.setProperty("minecraft:oxidation_level", oxidation);
-      entity.remove();
+      if (!player.isValid) return;
+      player.sendMessage("§a[Smart Copper Golems Offline 0.1.1] Scripts ativos. " +
+          "Filtros: origem com graveto no primeiro espaço (ou baú de cobre); " +
+          "destino com item-amostra no primeiro espaço, papel no segundo para categoria.");
     } catch (error) {
-      console.warn("[SCG Offline] Could not replace vanilla golem: " + error);
+      console.warn("[SCG Offline] Unable to show status: " + error);
     }
-  });
+  }, 30);
 });
 
 system.runInterval(() => {

@@ -1,14 +1,16 @@
-# Smart Copper Golems Extended — Bedrock Offline 0.1.0 ALPHA
+# Smart Copper Golems Extended — Bedrock Offline 0.1.1 ALPHA
 
 **Add-on Bedrock independente**. Nenhum Fabric, nenhum Geyser, nenhum Java ou servidor são necessários. O arquivo instalável `.mcaddon` inclui **Behavior Pack (scripts)** e **Resource Pack (modelo e animação)**. O `.mcpack` da integração Geyser **não** é necessário para jogos offline; está reaproveitado dentro desta versão.
 
 ## Instalação em Windows/Android Bedrock
 
+**Importar não ativa o comportamento automaticamente.** Os dois packs devem estar habilitados nas configurações do mundo. Para investigar se os scripts carregaram e como testar o inventário dos baús, leia [DIAGNOSTICO_PT_BR.md](DIAGNOSTICO_PT_BR.md).
+
 1. Faça backup do mundo atual. Recomendo criar **um mundo de testes**.
-2. No GitHub Actions, baixe o artifact **SmartCopperGolems_Offline_0.1.0_alpha** e extraia o arquivo `.mcaddon`.
+2. No GitHub Actions, baixe o artifact **SmartCopperGolems_Offline_0.1.1_alpha** e extraia o arquivo `.mcaddon`.
 3. Abra o arquivo `.mcaddon` com o Minecraft Bedrock e aguarde a importação dos dois packs.
 4. Ao criar/editar o mundo, ative os pacotes **Smart Copper Golems — Offline (Behavior)** e **Smart Copper Golems — Offline (Visual)**. Confira dependências e mensagens no jogo.
-5. Faça um Copper Golem normalmente no **Survival**, colocando uma abóbora esculpida no bloco de cobre. O script tentará substituir o golem recém-criado por um `scg:smart_copper_golem`. Os golems antigos já presentes no mapa **não** são convertidos automaticamente.
+5. Faça um Copper Golem normalmente no **Survival**, colocando uma abóbora esculpida no bloco de cobre. O próprio `minecraft:copper_golem` recebe o comportamento offline: tanto os golems já existentes quanto os novos podem participar, com os dois packs ativos no mundo. Confirme no chat a mensagem verde `[Smart Copper Golems Offline 0.1.1] Scripts ativos`.
 6. Monte um teste com um baú de origem e outro de destino com filtros (veja abaixo).
 
 **Importante:** esta é uma ALPHA funcional em nível de lógica e empacotamento, ainda **não validada dentro do jogo**. Não prometemos compatibilidade com todas as edições/plataformas ou paridade total com o Java até o teste.
@@ -30,7 +32,7 @@ Exemplo: **origem:** baú comum com stick no primeiro slot e diamantes no tercei
 
 ## O que a alpha faz
 
-- Converte golems de cobre **recém-criados** em sobrevivência para uma variante customizada; mantém propriedades vanilla de oxidação no comportamento visual.
+- Aplica o comportamento modificado ao **Copper Golem vanilla**, inclusive aos golems existentes em mundos de teste; mantém propriedades de oxidação no visual.
 - Procura baús carregados a até **9 blocos na horizontal e 5 na vertical**.
 - Separa origem e destino com filtros explícitos. Ignora baús não marcados e evita usar outros compartimentos como destino arbitrário.
 - Transporta itens em até **16 por viagem**; transfere os itens apenas **no momento da entrega**, com revalidação de origem/destino para reduzir risco de perda/duplicação.
@@ -49,6 +51,6 @@ Exemplo: **origem:** baú comum com stick no primeiro slot e diamantes no tercei
 
 ## Desenvolvimento e build sem programas locais
 
-A compilação e verificação sintática/estática são feitas em `.github/workflows/bedrock-offline-addon.yml`. O workflow verifica que os packs possuem UUIDs distintos, 1.413 categorias/IDs válidos no índice, 42 grupos, e valida `main.js` com TypeScript + `@minecraft/server@2.2.0`. Depois empacota `behavior_pack/` e `resource_pack/` num único `SmartCopperGolems_Offline_0.1.0_alpha.mcaddon`.
+A compilação e verificação sintática/estática são feitas em `.github/workflows/bedrock-offline-addon.yml`. O workflow verifica que os packs possuem UUIDs distintos, 1.413 categorias/IDs válidos no índice, 42 grupos, e valida `main.js` com TypeScript + `@minecraft/server@2.2.0`. Depois empacota `behavior_pack/` e `resource_pack/` num único `SmartCopperGolems_Offline_0.1.1_alpha.mcaddon`.
 
 Fonte original da entidade e modelo visual: **Mojang bedrock-samples**. A animação das pernas deriva dos keyframes entregues pelo usuário no Blockbench. Projeto original Java Smart Copper Golems por GameMech007 (Apache-2.0), edição Extended e porta para Bedrock por Kesley. Código da nova lógica sob Apache-2.0 conforme licença do repositório.
