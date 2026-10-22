@@ -7,7 +7,7 @@ import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "BedrockOffline"
-OUTPUT = ROOT / "build" / "SmartCopperGolems_Offline_0.1.0_alpha.mcaddon"
+OUTPUT = ROOT / "build" / "SmartCopperGolems_Offline_0.1.1_alpha.mcaddon"
 PACKS = ("behavior_pack", "resource_pack")
 
 def validate():
@@ -29,7 +29,9 @@ def validate():
     categories = json.loads((SOURCE / "behavior_pack" / "scripts" / "category-index.json").read_text(encoding="utf-8"))
     assert len(categories) == 1413
     assert len(set(categories.values())) == 42
-    assert "scg:reach" in json.loads((SOURCE / "behavior_pack" / "entities" / "smart_copper_golem.json").read_text(encoding="utf-8"))["minecraft:entity"]["description"]["properties"]
+    assert json.loads((SOURCE / "behavior_pack" / "entities" / "copper_golem.json").read_text(encoding="utf-8"))["minecraft:entity"]["description"]["identifier"] == "minecraft:copper_golem"
+    assert json.loads((SOURCE / "resource_pack" / "entity" / "copper_golem.entity.json").read_text(encoding="utf-8"))["minecraft:client_entity"]["description"]["identifier"] == "minecraft:copper_golem"
+    assert "scg:reach" in json.loads((SOURCE / "behavior_pack" / "entities" / "copper_golem.json").read_text(encoding="utf-8"))["minecraft:entity"]["description"]["properties"]
 
 def main():
     validate()
