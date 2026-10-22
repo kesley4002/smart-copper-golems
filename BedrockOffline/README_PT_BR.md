@@ -4,7 +4,7 @@
 
 ## Instalação em Windows/Android Bedrock
 
-**Importar não ativa o comportamento automaticamente.** Os dois packs devem estar habilitados nas configurações do mundo. Para investigar se os scripts carregaram e como testar o inventário dos baús, leia [DIAGNOSTICO_PT_BR.md](../DIAGNOSTICO_PT_BR.md).
+**Importar não ativa o comportamento automaticamente.** Os dois packs devem estar habilitados nas configurações do mundo. Para investigar se os scripts carregaram e como testar o inventário dos baús, leia [DIAGNOSTICO_PT_BR.md](DIAGNOSTICO_PT_BR.md).
 
 1. Faça backup do mundo atual. Recomendo criar **um mundo de testes**.
 2. No GitHub Actions, baixe o artifact **SmartCopperGolems_Offline_0.1.1_alpha** e extraia o arquivo `.mcaddon`.
