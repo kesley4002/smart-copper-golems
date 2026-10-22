@@ -1,0 +1,35 @@
+name: Bedrock Native POC - validate and package
+
+on:
+  push:
+    branches: [feature/bedrock-native-rewrite-poc]
+    paths:
+      - 'BedrockNative/**'
+      - 'tools/build_bedrock_native.py'
+      - '.github/workflows/bedrock-native-test.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check JavaScript syntax
+        run: node --check BedrockNative/behavior_pack/scripts/main.js
+      - name: Type-check against stable Bedrock Script API
+        run: |
+          npm install --no-save --ignore-scripts --no-audit --no-fund typescript@5 @minecraft/server@2.2.0
+          npx tsc --allowJs --checkJs --noEmit --skipLibCheck --module esnext --moduleResolution bundler --target es2022 BedrockNative/behavior_pack/scripts/main.js
+      - name: Build native Bedrock test mcaddon
+        run: python tools/build_bedrock_native.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: SmartCopperGolems_Native_0.0.1_Test
+          path: build/SmartCopperGolems_Native_0.0.1_Test.mcaddon

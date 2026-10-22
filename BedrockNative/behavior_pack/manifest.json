@@ -1,0 +1,54 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Smart Copper Golems Native - Logic Test",
+    "description": "Native Bedrock Script API diagnostic and chest transfer prototype. Does not replace vanilla entities.",
+    "uuid": "a3f849ce-dc1a-4e62-a4f1-63e72f8d1c01",
+    "version": [
+      0,
+      0,
+      1
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      0
+    ]
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "a3f849ce-dc1a-4e62-a4f1-63e72f8d1c02",
+      "version": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "type": "script",
+      "language": "javascript",
+      "entry": "scripts/main.js",
+      "uuid": "a3f849ce-dc1a-4e62-a4f1-63e72f8d1c03",
+      "version": [
+        0,
+        0,
+        1
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.2.0"
+    },
+    {
+      "uuid": "a3f849ce-dc1a-4e62-a4f1-63e72f8d1c04",
+      "version": [
+        0,
+        0,
+        1
+      ]
+    }
+  ]
+}
