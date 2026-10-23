@@ -5,7 +5,7 @@
 - Comandos com permissão OP:
   - `/scg radius 500`: largura global 500×500 (comportamento existente).
   - `/scg golem "João" radius 30`: largura individual 30×30 ao redor da âncora original do golem.
-  - `/copper_golem João radius 30`: atalho equivalente.
+  - `/copper_golem "João" radius 30`: atalho equivalente.
   - `/scg golem "João"`: consultar limite individual.
   - `/scg golem "João" reset`: remover limite individual.
   - `/scg night`: consultar política noturna.
