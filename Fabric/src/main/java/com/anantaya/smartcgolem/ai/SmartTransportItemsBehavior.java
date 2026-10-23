@@ -4,6 +4,7 @@ package com.anantaya.smartcgolem.ai;
 import com.google.common.collect.ImmutableMap;
 import com.anantaya.smartcgolem.util.SearchVolume;
 import com.anantaya.smartcgolem.ServerWorkZoneSettings;
+import com.anantaya.smartcgolem.GolemProfession;
 import com.anantaya.smartcgolem.util.ItemFrameHelper;
 import com.anantaya.smartcgolem.util.StorageFrameIndex;
 import com.anantaya.smartcgolem.util.GolemRoutingRules;
@@ -21,6 +22,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.animal.golem.CopperGolem;
@@ -70,6 +72,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private enum TaskState {
         IDLE,
         WALK_TO_SOURCE,
+        WALK_TO_ITEM,
         WAIT_FOR_SOURCE,
         INTERACT_SOURCE,
         WALK_TO_DESTINATION,
@@ -115,6 +118,13 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private TaskState taskState = TaskState.IDLE;
 
     private BlockPos currentTarget = null;
+    // Used only by the explicitly named Collector profession. The original
+    // chest-routing state machine remains active for unnamed organizers.
+    private ItemEntity targetGroundItem = null;
+    private long groundItemSearchStartTick = 0L;
+    private static final int GROUND_COLLECT_HORIZONTAL = 16;
+    private static final int GROUND_COLLECT_VERTICAL = 5;
+    private static final int GROUND_COLLECT_TIMEOUT_TICKS = 200;
     private BlockPos currentWalkTarget = null;
     private BlockPos cachedHopGoal = null;
     private BlockPos cachedHopTarget = null;
@@ -167,6 +177,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         currentTarget = null;
         currentWalkTarget = null;
+        targetGroundItem = null;
         openedContainer = null;
         openedCopperGolem = null;
         remoteChestLevel = null;
@@ -324,6 +335,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
             case IDLE ->
                 searchForTarget(level, mob, gameTime);
+
+            case WALK_TO_ITEM -> collectGroundItem(level, mob, gameTime);
 
             case WALK_TO_SOURCE -> {
                 walkToTarget(mob, gameTime);
@@ -909,6 +922,20 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             return;
         }
 
+        // Only the Collector profession replaces chest pickup with ground
+        // pickup. Unnamed golems and all other names keep original sorting.
+        if (!carrying && isCollector(mob)) {
+            ItemEntity item = findGroundItem(level, mob);
+            if (item != null) {
+                targetGroundItem = item;
+                groundItemSearchStartTick = gameTime;
+                currentTarget = item.blockPosition().immutable();
+                currentWalkTarget = currentTarget;
+                taskState = TaskState.WALK_TO_ITEM;
+            }
+            return;
+        }
+
         BlockPos best = carrying
                 ? findDestinationChest(level, mob)
                 : findSourceChest(level, mob);
@@ -927,6 +954,116 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             System.out.println("[SMART-GOLEM SOURCE] Selected source chest=" + best);
             switchState(mob, TaskState.WALK_TO_SOURCE, best, gameTime);
         }
+    }
+
+    private boolean isCollector(PathfinderMob mob) {
+        if (!(mob instanceof CopperGolem golem)) return false;
+        return GolemProfession.fromName(
+                golem.getCustomName() == null ? null : golem.getCustomName().getString())
+                == GolemProfession.COLETOR;
+    }
+
+    /**
+     * Scan a small region of already loaded entities. Never load chunks,
+     * modify crops, mine blocks, or pull items out of unmarked containers.
+     */
+    private ItemEntity findGroundItem(ServerLevel level, PathfinderMob mob) {
+        ItemEntity best = null;
+        double bestDistance = Double.MAX_VALUE;
+        AABB area = new AABB(mob.blockPosition()).inflate(
+                GROUND_COLLECT_HORIZONTAL, GROUND_COLLECT_VERTICAL, GROUND_COLLECT_HORIZONTAL);
+        for (ItemEntity item : level.getEntitiesOfClass(ItemEntity.class, area)) {
+            if (!canCollectGroundItem(level, mob, item)) continue;
+            double distance = mob.distanceToSqr(item);
+            if (distance >= bestDistance) continue;
+            // Avoid choosing an isolated item behind an inaccessible barrier.
+            Path path = mob.getNavigation().createPath(item.blockPosition(), 1);
+            if (path == null || !path.canReach()) continue;
+            best = item;
+            bestDistance = distance;
+        }
+        return best;
+    }
+
+    /**
+     * Do not remove items from the world unless an actual framed destination
+     * exists in this golem's work zone and has room for the stack.
+     */
+    private boolean canCollectGroundItem(ServerLevel level, PathfinderMob mob, ItemEntity item) {
+        if (!(mob instanceof CopperGolem golem)
+                || !item.isAlive()
+                || item.getItem().isEmpty()
+                || !ServerWorkZoneSettings.contains(golem, level, item.blockPosition())) return false;
+        ItemStack sample = item.getItem();
+        for (BlockPos pos : StorageFrameIndex.destinations(level, sample)) {
+            if (!ServerWorkZoneSettings.contains(golem, level, pos)
+                    || ItemFrameHelper.hasSourceMarker(level, pos)) continue;
+            BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
+            if (chest == null) continue;
+            FrameFilterResult filter = getFrameFilterResult(level, pos, sample);
+            if (!GolemRoutingRules.accepts(filter.hasFrame(), filter.matchesHeld(), false)) continue;
+            if (!hasSpaceFor(getActualContainer(level, pos, chest), sample)) return true;
+        }
+        return false;
+    }
+
+    private void cancelGroundCollection(PathfinderMob mob) {
+        targetGroundItem = null;
+        taskState = TaskState.IDLE;
+        currentTarget = null;
+        currentWalkTarget = null;
+        mob.getNavigation().stop();
+    }
+
+    private void collectGroundItem(ServerLevel level, PathfinderMob mob, long gameTime) {
+        ItemEntity item = targetGroundItem;
+        if (item == null || !isCollector(mob) || !mob.getMainHandItem().isEmpty()
+                || gameTime - groundItemSearchStartTick > GROUND_COLLECT_TIMEOUT_TICKS
+                || !canCollectGroundItem(level, mob, item)) {
+            cancelGroundCollection(mob);
+            return;
+        }
+
+        BlockPos pos = item.blockPosition().immutable();
+        currentTarget = pos;
+        currentWalkTarget = pos;
+        if (mob.distanceToSqr(item) > 2.25D) {
+            BehaviorUtils.setWalkAndLookTargetMemories(mob, pos, speedModifier, 0);
+            return;
+        }
+
+        // Server tick is single-threaded. Revalidate immediately before
+        // changing either inventory and never leave a copy on the ground.
+        ItemStack ground = item.getItem();
+        int count = GolemRoutingRules.amountToCarry(
+                ground.getCount(), ground.getMaxStackSize(), ServerCarrySettings.maximum());
+        if (count <= 0) {
+            cancelGroundCollection(mob);
+            return;
+        }
+        ItemStack carried = ground.copyWithCount(count);
+        ItemStack remainder = ground.copy();
+        remainder.shrink(count);
+        mob.setItemInHand(InteractionHand.MAIN_HAND, carried);
+        if (remainder.isEmpty()) item.discard();
+        else item.setItem(remainder);
+        if (mob instanceof CopperGolem copper) {
+            copper.playSound(SoundEvents.COPPER_GOLEM_ITEM_GET);
+            copper.setState(CopperGolemState.GETTING_ITEM);
+        }
+        targetGroundItem = null;
+        // Collector items have no physical source chest. Keep the existing
+        // filtered destination, insertion, animation and chest-lock code.
+        returnToSourceChest = null;
+        lastPickupChest = null;
+        BlockPos destination = findDestinationChest(level, mob);
+        if (destination == null) {
+            taskState = TaskState.IDLE; // preserve the carried stack for retry
+            currentTarget = null;
+            currentWalkTarget = null;
+            return;
+        }
+        switchState(mob, TaskState.WALK_TO_DESTINATION, destination, gameTime);
     }
 
     /**
