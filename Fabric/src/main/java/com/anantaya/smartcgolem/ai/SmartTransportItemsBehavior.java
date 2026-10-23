@@ -301,6 +301,25 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     @Override
     protected void tick(@NonNull ServerLevel level, PathfinderMob mob, long gameTime) {
 
+        // A newly reduced work area must stop the CURRENT job as well as
+        // prevent picking new jobs. Never drop a carried stack.
+        if (mob instanceof CopperGolem golem
+                && taskState != TaskState.STRETCH_GROW
+                && taskState != TaskState.STRETCH_SHRINK
+                && taskState != TaskState.REMOTE_CLOSE
+                && (!ServerWorkZoneSettings.contains(golem, level, mob.blockPosition())
+                    || (currentTarget != null
+                        && !ServerWorkZoneSettings.contains(golem, level, currentTarget)))) {
+            closeOpenedContainer();
+            unlockChest();
+            mob.getNavigation().stop();
+            taskState = TaskState.IDLE;
+            currentTarget = null;
+            currentWalkTarget = null;
+            returnHome(mob, golem);
+            return;
+        }
+
         switch (taskState) {
 
             case IDLE ->
@@ -883,7 +902,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         nextSearchTick = gameTime + SEARCH_COOLDOWN_TICKS;
 
         boolean carrying = !mob.getMainHandItem().isEmpty();
-        if (!carrying && mob instanceof CopperGolem golem && isNight(level)) {
+        if (!carrying && mob instanceof CopperGolem golem
+                && ServerWorkZoneSettings.isNight(level)
+                && !ServerWorkZoneSettings.nightWorkEnabled()) {
             returnHome(mob, golem);
             return;
         }
@@ -926,7 +947,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 ? ServerWorkZoneSettings.anchor(golem) : mobPos;
         SearchVolume area = new SearchVolume(
                 home.getX(), mobPos.getY(), home.getZ(),
-                ServerWorkZoneSettings.halfWidth(), verticalSearchDistance
+                mob instanceof CopperGolem golem
+                        ? ServerWorkZoneSettings.halfWidth(golem, level)
+                        : ServerWorkZoneSettings.halfWidth(),
+                verticalSearchDistance
         );
         java.util.List<BlockPos> candidates = new java.util.ArrayList<>();
 
@@ -939,8 +963,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
                 for (BlockPos pos : chunk.getBlockEntitiesPos()) {
                     if (!area.contains(pos.getX(), pos.getY(), pos.getZ())
-                            || !ServerWorkZoneSettings.contains(
-                                    home, pos)) continue;
+                            || !(mob instanceof CopperGolem golem
+                                        ? ServerWorkZoneSettings.contains(golem, level, pos)
+                                        : ServerWorkZoneSettings.contains(home, pos))) continue;
                     BlockState state = chunk.getBlockState(pos);
                     if (!blockType.test(state)) continue;
                     candidates.add(pos.immutable());
@@ -963,7 +988,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         sources.sort((a,b) -> Double.compare(getRoughDistance(mob,a), getRoughDistance(mob,b)));
         BlockPos home = mob instanceof CopperGolem c ? ServerWorkZoneSettings.anchor(c) : mob.blockPosition();
         for (BlockPos pos : sources) {
-            if (!ServerWorkZoneSettings.contains(home, pos)
+            if (!(mob instanceof CopperGolem golem
+                    ? ServerWorkZoneSettings.contains(golem, level, pos)
+                    : ServerWorkZoneSettings.contains(home, pos))
                     || Math.abs((long)pos.getY() - mob.blockPosition().getY()) > 64) continue;
 
             BaseContainerBlockEntity chest = getSourceBlockEntity(level, pos);
@@ -997,7 +1024,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 StorageFrameIndex.destinations(level, held));
         candidates.sort((a,b) -> Double.compare(getRoughDistance(mob,a), getRoughDistance(mob,b)));
         for (BlockPos pos : candidates) {
-            if (!ServerWorkZoneSettings.contains(home, pos)
+            if (!(mob instanceof CopperGolem golem
+                    ? ServerWorkZoneSettings.contains(golem, level, pos)
+                    : ServerWorkZoneSettings.contains(home, pos))
                     || Math.abs((long)pos.getY() - mob.blockPosition().getY()) > 64) continue;
             if (pos.equals(lastPickupChest) || ItemFrameHelper.hasSourceMarker(level, pos)) continue;
             BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
@@ -1229,11 +1258,6 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         if (sourceBlockType.test(state) && entity instanceof ChestBlockEntity chest) return chest;
         if (ItemFrameHelper.hasSourceMarker(level, pos)) return getDestinationBlockEntity(level, pos);
         return null;
-    }
-
-    private boolean isNight(ServerLevel level) {
-        long t = Math.floorMod(level.getOverworldClockTime(), 24000L);
-        return t >= 13000L && t < 23000L;
     }
 
     private void returnHome(PathfinderMob mob, CopperGolem golem) {
