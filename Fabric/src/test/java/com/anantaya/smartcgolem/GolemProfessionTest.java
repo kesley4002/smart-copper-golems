@@ -22,6 +22,17 @@ public class GolemProfessionTest {
     }
 
     @Test
+    public void compostingBelongsToTheSameFarmerNameTag() {
+        assertEquals(GolemProfession.AGRICULTOR,
+                GolemProfession.fromName("Agricultor: João"));
+        assertEquals(GolemProfession.AGRICULTOR,
+                GolemProfession.fromName("agricultor"));
+        // No separate Composteiro job or name tag exists.
+        assertEquals(GolemProfession.ORGANIZADOR,
+                GolemProfession.fromName("Composteiro"));
+    }
+
+    @Test
     public void unconfiguredGolemsKeepLegacySorting() {
         assertEquals(GolemProfession.ORGANIZADOR, GolemProfession.fromName(null));
         assertEquals(GolemProfession.ORGANIZADOR, GolemProfession.fromName(""));

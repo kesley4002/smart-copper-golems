@@ -10,12 +10,14 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Properties;
 
-/** World-local farming preferences. Composting is explicitly opt-in. */
+/** World-local farming preferences. Only the Farmer works with composters. */
 public final class ServerFarmerSettings {
     private ServerFarmerSettings() {}
     private static final String FILE = "smart-copper-golem-farming.properties";
     private static final int DEFAULT_RESERVE = 32;
-    private static boolean compostEnabled;
+    // New worlds: Farmer handles composting by default (user-requested).
+    // Explicitly saved compost.enabled=false always wins.
+    private static boolean compostEnabled = true;
     private static int reserve = DEFAULT_RESERVE;
     private static Path file;
 
@@ -23,14 +25,14 @@ public final class ServerFarmerSettings {
     public static int reserve() { return reserve; }
 
     public static void load(MinecraftServer server) {
-        compostEnabled = false;
+        compostEnabled = true;
         reserve = DEFAULT_RESERVE;
         file = server.getWorldPath(LevelResource.ROOT).resolve(FILE);
         if (!Files.isRegularFile(file)) return;
         Properties data = new Properties();
         try (InputStream in = Files.newInputStream(file)) {
             data.load(in);
-            compostEnabled = Boolean.parseBoolean(data.getProperty("compost.enabled", "false"));
+            compostEnabled = Boolean.parseBoolean(data.getProperty("compost.enabled", "true"));
             int next = Integer.parseInt(data.getProperty("seed.reserve", Integer.toString(DEFAULT_RESERVE)));
             if (next >= 0 && next <= 256) reserve = next;
         } catch (Exception e) {
