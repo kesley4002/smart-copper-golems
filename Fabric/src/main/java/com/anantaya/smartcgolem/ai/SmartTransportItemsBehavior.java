@@ -148,7 +148,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     // furnace input/output/fuel inventory slots.
     private FuelTrip fuelTrip = null;
     private long fuelTripStartTick = 0L;
-    private static final long FUEL_TRIP_TIMEOUT_TICKS = 480L;
+    // Distant registered furnaces require multiple short-hops. Preserve
+    // item safety, but do not cancel after only 24 seconds of walking.
+    private static final long FUEL_TRIP_TIMEOUT_TICKS = 1600L;
     private record FuelTrip(BlockPos furnace, BlockPos supply, ItemStack fuel,
                             int sourceSlot, int count) {}
     private BlockPos cachedHopGoal = null;
@@ -176,6 +178,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     // The farmer should not idle for five seconds between nearby harvests.
     // Do not increase organizer/collector wide-storage scanning frequency.
     private static final int FARMER_SEARCH_COOLDOWN_TICKS = 20;
+    // Furnace detection visits loaded CHUNK block entity indexes, not blocks.
+    // Throttle wide scans for one Fornalheiro to once every four seconds.
+    private static final int FURNACE_SEARCH_COOLDOWN_TICKS = 80;
 
     public SmartTransportItemsBehavior(
             float speedModifier,
@@ -972,8 +977,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         }
 
         nextSearchTick = gameTime
-                + ((isFarmer(mob) || isFurnaceTender(mob))
-                        ? FARMER_SEARCH_COOLDOWN_TICKS : SEARCH_COOLDOWN_TICKS);
+                + (isFarmer(mob) ? FARMER_SEARCH_COOLDOWN_TICKS
+                : isFurnaceTender(mob) ? FURNACE_SEARCH_COOLDOWN_TICKS
+                : SEARCH_COOLDOWN_TICKS);
 
         boolean carrying = !mob.getMainHandItem().isEmpty();
         if (!carrying && mob instanceof CopperGolem golem
@@ -1367,24 +1373,28 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     }
 
     /**
-     * Read candidate FURNACES only in loaded chunks inside a limited local
-     * work radius. The source is always a properly framed storage container;
-     * the Furnace tender never crafts charcoal or consumes wood.
+     * Find candidate FURNACES using already-loaded chunk block-entity maps.
+     * A 12-block hardcoded cube made newly named golems miss distant furnaces.
+     * This search honors the separately configurable 16..128-block detection
+     * area, the existing individual/day/night work square, and avoids tickets.
+     * The source remains a properly framed storage container; never craft fuel.
      */
     private FuelTrip findFuelTrip(ServerLevel level, CopperGolem golem) {
         BlockPos center = golem.blockPosition();
         FuelTrip closest = null;
         double closestScore = Double.MAX_VALUE;
-        for (BlockPos pos : BlockPos.betweenClosed(
-                center.offset(-12, -3, -12), center.offset(12, 3, 12))) {
-            if (!ServerWorkZoneSettings.contains(golem, level, pos)
-                    || level.getChunkSource().getChunkNow(Math.floorDiv(pos.getX(),16),
-                            Math.floorDiv(pos.getZ(),16)) == null) continue;
+        for (BlockPos pos : FurnaceSearch.loadedFurnaces(level, center,
+                ServerFurnaceSettings.detection(golem.getUUID()))) {
+            if (!ServerWorkZoneSettings.contains(golem, level, pos)) continue;
             if (!(level.getBlockEntity(pos) instanceof AbstractFurnaceBlockEntity furnace)) continue;
             ItemStack present = furnace.getItem(1);
             if (!present.isEmpty() && !FurnaceSupplyPolicy.allowedFuel(present)) continue;
-            if (!isFarmerNearStorage(golem, pos) &&
-                    getPathCost(golem, pos) == Double.MAX_VALUE) continue;
+            // The vanilla path planner cannot reach a 60-block destination
+            // in one request. For distant furnaces, use the existing short-hop
+            // navigation and validate the nearby path on arrival.
+            if (!isFarmerNearStorage(golem, pos)
+                    && center.distSqr(pos) <= 24 * 24
+                    && getPathCost(golem, pos) == Double.MAX_VALUE) continue;
 
             for (ItemStack fuel : new ItemStack[]{
                     new ItemStack(Items.COAL),
