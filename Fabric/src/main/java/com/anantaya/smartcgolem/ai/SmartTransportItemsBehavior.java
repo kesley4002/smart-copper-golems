@@ -138,6 +138,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private long cropRouteStartTick = 0L;
     private Sheep targetSheep = null;
     private long sheepWalkStartTick = 0L;
+    // Shears vanish immediately upon shearing and remain invisible while
+    // searching/chasing the generated wool. They only reappear after the
+    // actual wool is deposited, or after a bounded no-drop recovery.
+    private boolean woolPickupPending = false;
+    private long woolPickupPendingSince = 0L;
+    private static final long WOOL_PICKUP_GRACE_TICKS = 160L;
     private static final int SHEEP_SEARCH_RADIUS = 12;
     private static final int SHEEP_SEARCH_VERTICAL = 4;
     private static final long SHEEP_PATH_TIMEOUT = 240L;
@@ -219,6 +225,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         currentTarget = null;
         currentWalkTarget = null;
         targetGroundItem = null;
+        woolPickupPending = false;
         fuelTrip = null;
         compostStation = null;
         carryingForCompost = false;
@@ -361,7 +368,13 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 // Removing/renaming this profession removes ONLY the marked
                 // virtual tool, never a genuine pair of shears.
                 ShepherdShears.hideIfVirtual(golem);
-            } else if (mob.getMainHandItem().isEmpty()
+            } else if (woolPickupPending
+                    && gameTime - woolPickupPendingSince > WOOL_PICKUP_GRACE_TICKS
+                    && taskState == TaskState.IDLE) {
+                // The wool could have been picked up by a player, or despawned.
+                // Do not leave this golem forever without its virtual tool.
+                woolPickupPending = false;
+            } else if (!woolPickupPending && mob.getMainHandItem().isEmpty()
                     && (taskState == TaskState.IDLE || taskState == TaskState.WALK_TO_SHEEP)) {
                 // Render a normal-looking shears model in Java and Bedrock.
                 // A wool stack replaces it the moment the Pastor picks wool up.
@@ -1048,6 +1061,11 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         if (!carrying && collectsGroundDrops(mob)) {
             ItemEntity item = findGroundItem(level, mob);
             if (item != null) {
+                if (isShepherd(mob) && mob instanceof CopperGolem shepherd) {
+                    ShepherdShears.hideIfVirtual(shepherd);
+                    woolPickupPending = true;
+                    woolPickupPendingSince = gameTime;
+                }
                 targetGroundItem = item;
                 groundItemSearchStartTick = gameTime;
                 currentTarget = item.blockPosition().immutable();
@@ -1658,10 +1676,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         if (hasWoolStorage(level, golem,
                 new ItemStack(ShepherdWool.woolFor(sheep.getColor())))) {
             mob.getNavigation().stop();
-            // Native shearing: drops the sheep's real color of wool, leaves
-            // the sheep alive and lets it regenerate wool after eating grass.
+            // Native shearing: the physical wool is dropped at sheep's feet.
             sheep.shear(level, SoundSource.NEUTRAL, new ItemStack(Items.SHEARS));
             golem.swing(InteractionHand.MAIN_HAND);
+            ShepherdShears.hideIfVirtual(golem);
+            woolPickupPending = true;
+            woolPickupPendingSince = gameTime;
             nextSearchTick = gameTime + 1L;
         }
         targetSheep = null;
@@ -1774,6 +1794,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     }
 
     private void cancelGroundCollection(PathfinderMob mob) {
+        if (isShepherd(mob)) woolPickupPending = false;
         targetGroundItem = null;
         taskState = TaskState.IDLE;
         currentTarget = null;
@@ -1812,6 +1833,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         ItemStack remainder = ground.copy();
         remainder.shrink(count);
         mob.setItemInHand(InteractionHand.MAIN_HAND, carried);
+        if (isShepherd(mob)) woolPickupPending = false;
         if (remainder.isEmpty()) item.discard();
         else item.setItem(remainder);
         if (mob instanceof CopperGolem copper) {
