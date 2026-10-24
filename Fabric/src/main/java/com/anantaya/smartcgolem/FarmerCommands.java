@@ -32,7 +32,12 @@ public final class FarmerCommands {
                 + (ServerFarmerSettings.compostEnabled() ? "LIGADA" : "DESLIGADA")
                 + "; reserva mínima por item e recipiente: "
                 + ServerFarmerSettings.reserve()
-                + ". Apenas baús/barris marcados com composteira a 90 graus."), false);
+                + ". A mesma Name Tag Agricultor faz colheita, replantio, "
+                + "compostagem e armazenamento de farinha de osso. "
+                + "Coloque uma composteira a até 3 blocos de um baú/barril "
+                + "de colheita com moldura comum (0° categoria ou 45° item). "
+                + "Deve existir excedente acima da reserva e um destino filtrado "
+                + "para farinha de osso."), false);
         return 1;
     }
 
