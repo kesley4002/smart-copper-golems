@@ -1,9 +1,9 @@
 # Category key TAB PT-BR name TAB source catalog sections TAB IDs
-stone_blocks	Pedras e blocos de cobre para construção	01,02,07,09,10,11,39,12,47,46	100
-stone_construction	Escadas, lajes e muros de pedra/cobre	03,04,05,09,10,11,39,12,47,46	137
-soil	Terras, solos e cascalhos	06,09,10,11,39,12,47,46	14
+stone_blocks	Pedras e blocos de cobre para construção	01,02,07,09,10,11,39,12,47,46	90
+stone_construction	Escadas, lajes e muros de pedra/cobre	03,04,05,09,10,11,39,12,47,46	122
+soil	Terras, solos e cascalhos	06,09,10,11,39,12,47,46	12
 special_blocks	Obsidiana, resina, gelo, neve e especiais	08,38,40,09,10,11,39,12,47,46	17
-nether_blocks	Blocos do Nether	08,38,40,09,10,11,39,12,47,46	11
+nether_blocks	Netherrack, tijolos, basalto, pedras negras e demais blocos do Nether	08,38,40,09,10,11,39,12,47,46	38
 end_blocks	Blocos do End	08,38,40,09,10,11,39,12,47,46	4
 sculk_blocks	Blocos de Sculk	08,38,40,09,10,11,39,12,47,46	5
 mineral_blocks	Blocos compactados de minerais	09,10,11,39	13
@@ -11,8 +11,8 @@ mineral_gems	Gemas e recursos sem fundição	09,10,11,39	15
 mineral_ores	Minérios brutos (inclusive em bloco)	09,10,11,39	22
 mineral_refined	Lingotes, pepitas e metais refinados	09,10,11,39	8
 wood	Madeiras brutas, troncos e tábuas	13,14,15,09,10,11,39,12,47,46	62
-wood_shapes	Escadas e lajes de madeira	13,14,15	26
-wood_crafting	Marcenaria: portas, cercas, portões, placas, botões, prateleiras e gravetos	16,17,18,19,09,10,11,39,12,47,46	109
+wood_shapes	Escadas, lajes de madeira e gravetos	13,14,15	27
+wood_crafting	Marcenaria: portas, cercas, portões, placas, botões e prateleiras	16,17,18,19,09,10,11,39,12,47,46	108
 vegetation	Vegetação e blocos naturais	20,34,35,36,09,10,11,39,12,47,46	83
 lighting	Iluminação (exceto tocha de redstone)	55,09,10,11,39,12,47,46	33
 glass	Vidros e painéis	21,22,09,10,11,39,12,47,46	35
