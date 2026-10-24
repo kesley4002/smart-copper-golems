@@ -37,6 +37,12 @@ public final class ShepherdShears {
         return stack.isEmpty() || isVirtual(stack);
     }
 
+    public static void protectIfVirtual(CopperGolem golem) {
+        if (isVirtual(golem.getMainHandItem())) {
+            golem.setDropChance(EquipmentSlot.MAINHAND, 0.0F);
+        }
+    }
+
     public static void showIfFree(CopperGolem golem) {
         if (!golem.getMainHandItem().isEmpty()) return;
         // Never allow the cosmetic item to become loot on death.
