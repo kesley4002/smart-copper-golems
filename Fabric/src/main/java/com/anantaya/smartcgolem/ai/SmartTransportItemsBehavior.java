@@ -130,7 +130,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private long cropRouteStartTick = 0L;
     private long compostRouteStartTick = 0L;
     private long nextCompostProbeTick = 0L;
-    private static final long COMPOST_PROBE_INTERVAL = 80L;
+    private static final long COMPOST_PROBE_INTERVAL = 60L;
     private static final int CROP_ROUTE_TIMEOUT_TICKS = 240;
     private static final int GROUND_COLLECT_HORIZONTAL = 16;
     private static final int GROUND_COLLECT_VERTICAL = 5;
@@ -415,6 +415,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     return;
                 }
 
+                // Farmer must physically approach the chest; other professions
+                // keep their existing distant transport behavior.
+                if (isFarmer(mob) && !isFarmerNearStorage(mob, currentTarget)) {
+                    startStretchNearElevatedChest(level, mob, gameTime);
+                    return;
+                }
                 if (isChestLocked(level.dimension(), currentTarget, gameTime) && !isChestBusy(chest)) {
                     if (!startStretchNearElevatedChest(level, mob, gameTime))
                         switchState(mob, TaskState.INTERACT_DESTINATION, currentTarget, gameTime);
@@ -781,6 +787,14 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
     private void interactWithDestination(ServerLevel level, PathfinderMob mob, long gameTime) {
 
+        // An interaction must not open or change the container before the
+        // Farmer arrives. Re-check even if the destination moved/changed.
+        if (currentTarget != null && isFarmer(mob)
+                && !isFarmerNearStorage(mob, currentTarget)) {
+            switchState(mob, TaskState.WALK_TO_DESTINATION, currentTarget, gameTime);
+            return;
+        }
+
         if (currentTarget == null) {
             closeOpenedContainer();
             switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);
@@ -954,16 +968,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 return;
             }
             if (isFarmer(mob)) {
-                BlockPos crop = FarmerHarvest.findCrop(level, (CopperGolem) mob);
-                if (crop != null) {
-                    // Crop targets are NOT chests. Do not pick an adjacent
-                    // chest-access waypoint, which allowed remote harvesting.
-                    currentTarget = crop;
-                    currentWalkTarget = crop;
-                    cropRouteStartTick = gameTime;
-                    taskState = TaskState.WALK_TO_CROP;
-                    return;
-                }
+                // Harvest drops have first priority. Service a composter
+                // periodically before choosing more crops, otherwise a farm
+                // with constantly ripe plants starves this workstation.
                 if (ServerFarmerSettings.compostEnabled() && gameTime >= nextCompostProbeTick) {
                     nextCompostProbeTick = gameTime + COMPOST_PROBE_INTERVAL;
                     BlockPos composter = findServiceableComposter(level, (CopperGolem) mob);
@@ -972,7 +979,16 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                         currentWalkTarget = findBestWalkTargetForChest(mob, composter);
                         compostRouteStartTick = gameTime;
                         taskState = TaskState.WALK_TO_COMPOSTER;
+                        return;
                     }
+                }
+                BlockPos crop = FarmerHarvest.findCrop(level, (CopperGolem) mob);
+                if (crop != null) {
+                    currentTarget = crop;
+                    currentWalkTarget = crop;
+                    cropRouteStartTick = gameTime;
+                    taskState = TaskState.WALK_TO_CROP;
+                    return;
                 }
             }
             return;
@@ -1018,10 +1034,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (!work) continue;
             double dist = p.distSqr(origin);
             if (dist >= distanceBest) continue;
-            if (golem.blockPosition().distSqr(p) > 9) {
-                Path path = golem.getNavigation().createPath(p, 1);
-                if (path == null || !path.canReach()) continue;
-            }
+            if (golem.blockPosition().distSqr(p) > 9
+                    && getPathCost(golem, p) == Double.MAX_VALUE) continue;
             best = p.immutable();
             distanceBest = dist;
         }
@@ -1031,25 +1045,38 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private record CompostInput(BlockPos containerPos, int slot) {}
 
     /**
-     * Only an explicitly marked chest/barrel within two blocks of the
-     * composter can donate surplus. In particular, unrelated storage
-     * containers never become compost fuel.
+     * A composter workstation can read the EXISTING ordinary item frame
+     * filter from a nearby agricultural chest. The 90-degree composter
+     * marker remains supported as an optional dedicated compost source.
+     * Opt-in /scg farmer compost on and stock reserve are still required.
+     */
+    private boolean isAuthorizedCompostInput(ServerLevel level, BlockPos pos, ItemStack candidate) {
+        if (ItemFrameHelper.hasSourceMarker(level, pos)) return false;
+        if (ItemFrameHelper.hasCompostSourceMarker(level, pos)) return true;
+        ItemFrameHelper.FilterResult filter = ItemFrameHelper.filter(level, pos, candidate);
+        return filter.hasFrame() && filter.matchesHeld();
+    }
+
+    /**
+     * Only a filtered chest/barrel close to the composter donates surplus.
+     * A composter block itself NEVER needs an item frame.
      */
     private CompostInput findCompostInput(ServerLevel level, CopperGolem golem,
                                          BlockPos composter) {
         int reserve = ServerFarmerSettings.reserve();
         for (BlockPos p : BlockPos.betweenClosed(
-                composter.offset(-2, -1, -2), composter.offset(2, 1, 2))) {
+                composter.offset(-3, -1, -3), composter.offset(3, 1, 3))) {
             if (level.getChunkSource().getChunkNow(Math.floorDiv(p.getX(), 16),
                     Math.floorDiv(p.getZ(), 16)) == null
                     || !ServerWorkZoneSettings.contains(golem, level, p)) continue;
-            if (!ItemFrameHelper.hasCompostSourceMarker(level, p)) continue;
+            if (ItemFrameHelper.hasSourceMarker(level, p)) continue;
             BaseContainerBlockEntity block = getDestinationBlockEntity(level, p);
             if (block == null) continue;
             Container container = getActualContainer(level, p, block);
             for (int slot = 0; slot < container.getContainerSize(); slot++) {
                 ItemStack stack = container.getItem(slot);
                 if (FarmerCompostPolicy.eligible(stack)
+                        && isAuthorizedCompostInput(level, p, stack)
                         && FarmerCompostPolicy.canConsumeOne(
                                 FarmerCompostPolicy.totalIn(container, stack), reserve))
                     return new CompostInput(p.immutable(), slot);
@@ -1111,11 +1138,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (input != null && !tryLockChest(level.dimension(), input.containerPos(), time)) {
                 try {
                     BaseContainerBlockEntity chest = getDestinationBlockEntity(level, input.containerPos());
-                    if (chest != null && ItemFrameHelper.hasCompostSourceMarker(level, input.containerPos())) {
+                    if (chest != null && !ItemFrameHelper.hasSourceMarker(level, input.containerPos())) {
                         Container container = getActualContainer(level, input.containerPos(), chest);
                         if (input.slot() < container.getContainerSize()) {
                             ItemStack stored = container.getItem(input.slot());
                             if (FarmerCompostPolicy.eligible(stored)
+                                    && isAuthorizedCompostInput(level, input.containerPos(), stored)
                                     && FarmerCompostPolicy.canConsumeOne(
                                             FarmerCompostPolicy.totalIn(container, stored),
                                             ServerFarmerSettings.reserve())) {
@@ -1142,6 +1170,20 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         nextSearchTick = time + 12L;
         nextCompostProbeTick = time + 20L;
         switchState(mob, TaskState.IDLE, null, time);
+    }
+
+    /** A natural chest interaction must occur beside the storage block. */
+    private boolean isFarmerNearStorage(PathfinderMob mob, BlockPos pos) {
+        double dx = mob.getX() - (pos.getX() + 0.5D);
+        double dz = mob.getZ() - (pos.getZ() + 0.5D);
+        return FarmerStorageProximity.normal(dx, mob.getY() - pos.getY(), dz);
+    }
+
+    private boolean nearElevatedFarmerStorage(PathfinderMob mob, BlockPos pos) {
+        int height = pos.getY() - mob.blockPosition().getY();
+        double dx = mob.getX() - (pos.getX() + 0.5D);
+        double dz = mob.getZ() - (pos.getZ() + 0.5D);
+        return FarmerStorageProximity.elevated(dx, height, dz);
     }
 
     private boolean isFarmer(PathfinderMob mob) {
@@ -1780,6 +1822,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
     private boolean tryMagicDepositIfStuck(ServerLevel level, PathfinderMob mob, long gameTime) {
 
+        // Preserve old distant fallback for other golems only.
+        // Farmers may stretch 2-5 blocks high when already beside the chest.
+        if (isFarmer(mob)) return false;
         if (!currentDestinationIsFramedMatch) {
             return false;
         }
@@ -1850,7 +1895,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         if (height < 2 || height > 5) return false;
         double dx = mob.getX() - (currentTarget.getX() + 0.5);
         double dz = mob.getZ() - (currentTarget.getZ() + 0.5);
-        if (dx*dx + dz*dz > 9.0) return false;
+        if (isFarmer(mob)) {
+            if (!FarmerStorageProximity.elevated(dx, height, dz)) return false;
+        } else if (dx*dx + dz*dz > 9.0D) return false;
         // Validate frame and destination before commencing long animation.
         if (getDestinationBlockEntity(level, currentTarget) == null
                 || ItemFrameHelper.hasSourceMarker(level, currentTarget)) return false;
@@ -1883,6 +1930,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private boolean magicDepositIntoMatchedChest(ServerLevel level, PathfinderMob mob, long gameTime) {
 
         BlockPos depositTarget = currentTarget;
+        // Animated upper chests remain possible, but never remote-deposit
+        // Farmer produce across the farm, through walls or from another floor.
+        if (isFarmer(mob) && (!stretchActive || depositTarget == null
+                || !nearElevatedFarmerStorage(mob, depositTarget))) return false;
 
         BaseContainerBlockEntity chest = getDestinationBlockEntity(level, depositTarget);
 
