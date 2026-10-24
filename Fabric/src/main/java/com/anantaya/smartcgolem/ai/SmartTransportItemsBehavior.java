@@ -7,6 +7,7 @@ import com.anantaya.smartcgolem.ServerWorkZoneSettings;
 import com.anantaya.smartcgolem.GolemProfession;
 import com.anantaya.smartcgolem.ServerFarmerSettings;
 import com.anantaya.smartcgolem.ServerCollectorSettings;
+import com.anantaya.smartcgolem.ServerFurnaceSettings;
 import com.anantaya.smartcgolem.util.ItemFrameHelper;
 import com.anantaya.smartcgolem.util.StorageFrameIndex;
 import com.anantaya.smartcgolem.util.GolemRoutingRules;
@@ -1391,7 +1392,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     new ItemStack(Items.COAL_BLOCK)}) {
                 if (!present.isEmpty()
                         && !ItemStack.isSameItemSameComponents(present, fuel)) continue;
-                int target = FurnaceSupplyPolicy.targetCount(fuel);
+                int target = FurnaceSupplyPolicy.targetCount(fuel,
+                        ServerFurnaceSettings.coal(golem.getUUID()));
                 if (FurnaceSupplyPolicy.requiredCount(present.getCount(), target, 1) <= 0)
                     continue;
                 for (BlockPos source : StorageFrameIndex.destinations(level, fuel)) {
@@ -1411,7 +1413,11 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                         if (!FurnaceSupplyPolicy.allowedFuel(stocked)
                                 || !ItemStack.isSameItemSameComponents(stocked, fuel)) continue;
                         int available = stocked.getCount() - FurnaceSupplyPolicy.MIN_SOURCE_RESERVE;
-                        int amount = Math.min(ServerCarrySettings.maximum(),
+                        // Fuel stack capacity is controlled by the furnace target, not
+                        // by the generic transport limit (/scg carry).
+                        // A 32/64-coal configured furnace may receive its
+                        // target in one trip when the source has enough.
+                        int amount = Math.min(64,
                                 FurnaceSupplyPolicy.requiredCount(present.getCount(),target,available));
                         if (amount <= 0) continue;
                         double score = center.distSqr(pos) + center.distSqr(source) * 0.35;
@@ -1473,7 +1479,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             ItemStack already = furnace.getItem(1);
             if (!already.isEmpty()
                     && !ItemStack.isSameItemSameComponents(already,trip.fuel())) return;
-            if (already.getCount() >= FurnaceSupplyPolicy.targetCount(trip.fuel())) return;
+            if (already.getCount() >= FurnaceSupplyPolicy.targetCount(trip.fuel(),
+                    ServerFurnaceSettings.coal(golem.getUUID()))) return;
             ItemStack taken = available.copyWithCount(trip.count());
             available.shrink(trip.count());
             inv.setChanged();
@@ -1515,7 +1522,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         ItemStack present = furnace.getItem(1);
         if (FurnaceSupplyPolicy.allowedFuel(held)
                 && (present.isEmpty() || ItemStack.isSameItemSameComponents(present,held))) {
-            int space = Math.max(0, FurnaceSupplyPolicy.targetCount(held) - present.getCount());
+            int space = Math.max(0, FurnaceSupplyPolicy.targetCount(held,
+                    ServerFurnaceSettings.coal(golem.getUUID())) - present.getCount());
             int qty = Math.min(space,held.getCount());
             if (qty > 0) {
                 if (present.isEmpty()) furnace.setItem(1,held.copyWithCount(qty));
