@@ -18,11 +18,12 @@ public enum GolemProfession {
     ORGANIZADOR,
     COLETOR,
     AGRICULTOR,
-    FORNALHEIRO;
+    FORNALHEIRO,
+    PASTOR;
 
     /** Both professions collect loose items. Ordinary organizers do not. */
     public boolean collectsGroundDrops() {
-        return this == COLETOR || this == AGRICULTOR;
+        return this == COLETOR || this == AGRICULTOR || this == PASTOR;
     }
 
     public static GolemProfession fromName(String customName) {
@@ -37,6 +38,7 @@ public enum GolemProfession {
             case "coletor", "collector" -> COLETOR;
             case "agricultor", "farmer" -> AGRICULTOR;
             case "fornalheiro", "furnace", "furnace tender", "furnace keeper", "furnace operator" -> FORNALHEIRO;
+            case "pastor", "pastor de ovelhas", "tosquiador", "shepherd", "shearer" -> PASTOR;
             default -> ORGANIZADOR;
         };
     }

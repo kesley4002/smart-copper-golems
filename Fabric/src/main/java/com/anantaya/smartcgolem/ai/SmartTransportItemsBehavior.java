@@ -21,6 +21,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.core.particles.ColorParticleOption;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.entity.animal.sheep.Sheep;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
@@ -80,6 +81,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         WALK_TO_SOURCE,
         WALK_TO_ITEM,
         WALK_TO_CROP,
+        WALK_TO_SHEEP,
         WALK_TO_COMPOST_SOURCE,
         WALK_TO_COMPOSTER,
         WALK_TO_FUEL_SOURCE,
@@ -134,6 +136,11 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private ItemEntity targetGroundItem = null;
     private long groundItemSearchStartTick = 0L;
     private long cropRouteStartTick = 0L;
+    private Sheep targetSheep = null;
+    private long sheepWalkStartTick = 0L;
+    private static final int SHEEP_SEARCH_RADIUS = 12;
+    private static final int SHEEP_SEARCH_VERTICAL = 4;
+    private static final long SHEEP_PATH_TIMEOUT = 240L;
     private long compostRouteStartTick = 0L;
     private BlockPos compostStation = null;
     private boolean carryingForCompost = false;
@@ -375,6 +382,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             case WALK_TO_ITEM -> collectGroundItem(level, mob, gameTime);
 
             case WALK_TO_CROP -> walkToCrop(level, mob, gameTime);
+            case WALK_TO_SHEEP -> approachAndShearSheep(level, mob, gameTime);
 
             case WALK_TO_COMPOST_SOURCE -> walkToCompostSource(level, mob, gameTime);
 
@@ -977,7 +985,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         }
 
         nextSearchTick = gameTime
-                + (isFarmer(mob) ? FARMER_SEARCH_COOLDOWN_TICKS
+                + ((isFarmer(mob) || isShepherd(mob)) ? FARMER_SEARCH_COOLDOWN_TICKS
                 : isFurnaceTender(mob) ? FURNACE_SEARCH_COOLDOWN_TICKS
                 : SEARCH_COOLDOWN_TICKS);
 
@@ -1032,6 +1040,17 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 currentWalkTarget = currentTarget;
                 taskState = TaskState.WALK_TO_ITEM;
                 return;
+            }
+            if (isShepherd(mob)) {
+                Sheep sheep = findWoolSheep(level, (CopperGolem) mob);
+                if (sheep != null) {
+                    targetSheep = sheep;
+                    sheepWalkStartTick = gameTime;
+                    currentTarget = sheep.blockPosition().immutable();
+                    currentWalkTarget = currentTarget;
+                    taskState = TaskState.WALK_TO_SHEEP;
+                    return;
+                }
             }
             if (isFarmer(mob)) {
                 BlockPos crop = FarmerHarvest.findCrop(level, (CopperGolem) mob);
@@ -1552,6 +1571,88 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         abandonFuelTrip(mob,time);
     }
 
+    private boolean isShepherd(PathfinderMob mob) {
+        if (!(mob instanceof CopperGolem golem)) return false;
+        return GolemProfession.fromName(
+                golem.getCustomName() == null ? null : golem.getCustomName().getString())
+                == GolemProfession.PASTOR;
+    }
+
+    /** Do not shear sheep when there is no storage for the wool color. */
+    private boolean hasWoolStorage(ServerLevel level, CopperGolem golem, ItemStack sample) {
+        for (BlockPos pos : StorageFrameIndex.destinations(level, sample)) {
+            if (!ServerWorkZoneSettings.contains(golem, level, pos)
+                    || ItemFrameHelper.hasSourceMarker(level, pos)) continue;
+            BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
+            if (chest == null) continue;
+            FrameFilterResult filter = getFrameFilterResult(level, pos, sample);
+            if (!GolemRoutingRules.accepts(filter.hasFrame(), filter.matchesHeld(), false)) continue;
+            // Legacy hasSpaceFor returns TRUE if there is no room.
+            if (!hasSpaceFor(getActualContainer(level, pos, chest), sample)) return true;
+        }
+        return false;
+    }
+
+    /** Nearby unsheared adults, restricted to the golem's existing work zone. */
+    private Sheep findWoolSheep(ServerLevel level, CopperGolem golem) {
+        BlockPos center = golem.blockPosition();
+        AABB area = new AABB(center).inflate(SHEEP_SEARCH_RADIUS, SHEEP_SEARCH_VERTICAL,
+                SHEEP_SEARCH_RADIUS);
+        Sheep nearest = null;
+        double closest = Double.MAX_VALUE;
+        for (Sheep sheep : level.getEntitiesOfClass(Sheep.class, area)) {
+            if (!sheep.isAlive() || !sheep.readyForShearing()
+                    || !ServerWorkZoneSettings.contains(golem, level, sheep.blockPosition()))
+                continue;
+            if (!hasWoolStorage(level, golem,
+                    new ItemStack(ShepherdWool.woolFor(sheep.getColor())))) continue;
+            double distance = golem.distanceToSqr(sheep);
+            if (distance >= closest) continue;
+            if (distance > 4.0D) {
+                Path path = golem.getNavigation().createPath(sheep.blockPosition(), 1);
+                if (path == null || !path.canReach()) continue;
+            }
+            nearest = sheep;
+            closest = distance;
+        }
+        return nearest;
+    }
+
+    private void approachAndShearSheep(ServerLevel level, PathfinderMob mob, long gameTime) {
+        Sheep sheep = targetSheep;
+        if (!(mob instanceof CopperGolem golem) || !isShepherd(mob)
+                || sheep == null || !sheep.isAlive() || sheep.level() != level
+                || !sheep.readyForShearing() || !mob.getMainHandItem().isEmpty()
+                || !ServerWorkZoneSettings.contains(golem, level, sheep.blockPosition())
+                || gameTime - sheepWalkStartTick > SHEEP_PATH_TIMEOUT) {
+            targetSheep = null;
+            mob.getNavigation().stop();
+            switchState(mob, TaskState.IDLE, null, gameTime);
+            return;
+        }
+        // Sheep move within a pen. Follow their current location, not the
+        // location at the moment this job was selected.
+        BlockPos sheepPosition = sheep.blockPosition().immutable();
+        currentTarget = sheepPosition;
+        currentWalkTarget = sheepPosition;
+        if (mob.distanceToSqr(sheep) > 3.24D
+                || !mob.getSensing().hasLineOfSight(sheep)) {
+            BehaviorUtils.setWalkAndLookTargetMemories(mob, sheepPosition, speedModifier, 0);
+            return;
+        }
+        if (hasWoolStorage(level, golem,
+                new ItemStack(ShepherdWool.woolFor(sheep.getColor())))) {
+            mob.getNavigation().stop();
+            // Native shearing: drops the sheep's real color of wool, leaves
+            // the sheep alive and lets it regenerate wool after eating grass.
+            sheep.shear(level, SoundSource.NEUTRAL, new ItemStack(Items.SHEARS));
+            golem.swing(InteractionHand.MAIN_HAND);
+            nextSearchTick = gameTime + 1L;
+        }
+        targetSheep = null;
+        switchState(mob, TaskState.IDLE, null, gameTime);
+    }
+
     private boolean isFarmer(PathfinderMob mob) {
         if (!(mob instanceof CopperGolem golem)) return false;
         return GolemProfession.fromName(
@@ -1616,7 +1717,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 // Fresh crop drops often land inside a replanted crop block.
                 // If the Farmer is already standing beside the drop, no path
                 // computation is needed to reach it. Do not relax Collector AI.
-                if (!isFarmer(mob) || distance > 2.25D) continue;
+                if (!(isFarmer(mob) || isShepherd(mob)) || distance > 2.25D) continue;
             }
             best = item;
             bestDistance = distance;
@@ -1635,6 +1736,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 || !ServerWorkZoneSettings.contains(golem, level, item.blockPosition())) return false;
         ItemStack sample = item.getItem();
         if (isFarmer(mob) && !FarmerHarvestDrops.allowed(sample)) return false;
+        if (isShepherd(mob) && !ShepherdWool.accepts(sample)) return false;
         if (isCollector(mob) && !ServerCollectorSettings.accepts(
                 golem.getUUID(), BuiltInRegistries.ITEM.getKey(sample.getItem()).toString()))
             return false;
@@ -1649,7 +1751,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             // A Farmer may only pick a drop if there is a physically
             // reachable destination. Other professions preserve their
             // original routing behavior (including distant fallbacks).
-            if (isFarmer(mob) && !farmerCanApproachStorage(mob, pos)) continue;
+            if ((isFarmer(mob) || isShepherd(mob))
+                    && !farmerCanApproachStorage(mob, pos)) continue;
             return true;
         }
         return false;
@@ -1820,7 +1923,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (!GolemRoutingRules.accepts(filter.hasFrame(), filter.matchesHeld(), false)) continue;
             Container actual = getActualContainer(level, pos, chest);
             if (hasSpaceFor(actual, held)) continue;
-            if (isFarmer(mob) && !farmerCanApproachStorage(mob, pos)) continue;
+            if ((isFarmer(mob) || isShepherd(mob))
+                    && !farmerCanApproachStorage(mob, pos)) continue;
             double pathCost = getPathCost(mob, pos);
             boolean reachable = pathCost != Double.MAX_VALUE;
             // Even when directly above a basement chest, keep it selected:

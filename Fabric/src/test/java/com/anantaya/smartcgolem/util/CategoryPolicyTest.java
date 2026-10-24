@@ -119,7 +119,7 @@ public final class CategoryPolicyTest {
         assertEquals(group, CategoryPolicy.classify("minecraft:oak_button"));
         assertEquals(group, CategoryPolicy.classify("minecraft:oak_pressure_plate"));
         assertEquals(group, CategoryPolicy.classify("minecraft:oak_shelf"));
-        assertEquals(group, CategoryPolicy.classify("minecraft:stick"));
+        assertEquals("wood_shapes", CategoryPolicy.classify("minecraft:stick"));
         assertFalse(CategoryPolicy.categoryKeys().contains("wood_accessories"));
         assertEquals("wood_shapes", CategoryPolicy.classify("minecraft:oak_stairs"));
     }
@@ -138,6 +138,31 @@ public final class CategoryPolicyTest {
         assertEquals("special_blocks", CategoryPolicy.classify("minecraft:resin_block"));
         assertEquals("special_blocks", CategoryPolicy.classify("minecraft:blue_ice"));
         assertEquals("special_blocks", CategoryPolicy.classify("minecraft:snow_block"));
+    }
+
+    @Test
+    public void netherStonesAndWoodFamiliesAreConsistent() {
+        for (String id : new String[] {
+                "netherrack", "nether_brick", "nether_bricks",
+                "nether_brick_fence", "nether_brick_slab", "nether_brick_stairs",
+                "nether_brick_wall", "red_nether_bricks", "red_nether_brick_wall",
+                "basalt", "smooth_basalt", "polished_basalt",
+                "blackstone", "blackstone_slab", "blackstone_stairs",
+                "blackstone_wall", "polished_blackstone_bricks",
+                "polished_blackstone_brick_wall", "soul_sand", "soul_soil"}) {
+            assertEquals("Nether member: " + id, "nether_blocks",
+                    CategoryPolicy.classify("minecraft:" + id));
+        }
+        assertEquals("stone_blocks", CategoryPolicy.classify("minecraft:stone"));
+        assertEquals("stone_construction", CategoryPolicy.classify("minecraft:stone_brick_wall"));
+        assertEquals("wood_shapes", CategoryPolicy.classify("minecraft:stick"));
+        assertEquals("wood_shapes", CategoryPolicy.classify("minecraft:warped_stairs"));
+        assertEquals("wood_shapes", CategoryPolicy.classify("minecraft:crimson_slab"));
+        assertEquals("wood", CategoryPolicy.classify("minecraft:warped_planks"));
+        assertEquals("wood", CategoryPolicy.classify("minecraft:crimson_stem"));
+        assertEquals("wood_crafting", CategoryPolicy.classify("minecraft:crimson_fence"));
+        assertEquals("wood_crafting", CategoryPolicy.classify("minecraft:warped_fence"));
+        assertEquals("wood_crafting", CategoryPolicy.classify("minecraft:oak_fence"));
     }
 
     @Test
@@ -162,7 +187,7 @@ public final class CategoryPolicyTest {
         assertEquals("wood", CategoryPolicy.classify("minecraft:crimson_planks"));
         assertEquals("wood_shapes", CategoryPolicy.classify("minecraft:oak_stairs"));
         assertEquals("wood_crafting", CategoryPolicy.classify("minecraft:oak_fence"));
-        assertEquals("wood_crafting", CategoryPolicy.classify("minecraft:stick"));
+        assertEquals("wood_shapes", CategoryPolicy.classify("minecraft:stick"));
         assertEquals("stone_construction", CategoryPolicy.classify("minecraft:quartz_stairs"));
         assertEquals("stone_blocks", CategoryPolicy.classify("minecraft:quartz_block"));
         assertEquals("glass", CategoryPolicy.classify("minecraft:red_stained_glass_pane"));
