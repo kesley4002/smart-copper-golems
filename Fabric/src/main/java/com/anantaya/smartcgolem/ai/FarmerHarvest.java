@@ -29,7 +29,7 @@ public final class FarmerHarvest {
     private static final int SEARCH_HORIZONTAL = 12;
     private static final int SEARCH_VERTICAL = 3;
     private static final int MAX_PATH_CHECKS = 32;
-    private static final double REACH_HORIZONTAL_SQR = 2.25D; // ~1.5 blocks
+    private static final double REACH_HORIZONTAL_SQR = 1.21D; // ~1.1 blocks, truly adjacent
 
     public static BlockPos findCrop(ServerLevel level, CopperGolem golem) {
         BlockPos center = golem.blockPosition();
