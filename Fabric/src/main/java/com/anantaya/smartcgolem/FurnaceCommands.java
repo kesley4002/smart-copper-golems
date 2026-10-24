@@ -24,24 +24,24 @@ public final class FurnaceCommands {
     private FurnaceCommands() {}
 
     public static LiteralArgumentBuilder<CommandSourceStack> node() {
-        return root("furnace", "fuel");
+        return root("furnace", "fuel", "detection");
     }
 
     public static LiteralArgumentBuilder<CommandSourceStack> nodePortuguese() {
-        return root("fornalheiro", "combustivel");
+        return root("fornalheiro", "combustivel", "deteccao");
     }
 
     public static LiteralArgumentBuilder<CommandSourceStack> aliasEnglish() {
-        return root("furnace_tender", "fuel")
+        return root("furnace_tender", "fuel", "detection")
                 .requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_MODERATOR));
     }
 
     public static LiteralArgumentBuilder<CommandSourceStack> aliasPortuguese() {
-        return root("fornalheiro", "combustivel")
+        return root("fornalheiro", "combustivel", "deteccao")
                 .requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_MODERATOR));
     }
 
-    private static LiteralArgumentBuilder<CommandSourceStack> root(String literal, String fuelLiteral) {
+    private static LiteralArgumentBuilder<CommandSourceStack> root(String literal, String fuelLiteral, String detectionLiteral) {
         return Commands.literal(literal)
                 .executes(ctx -> showGlobal(ctx.getSource()))
                 .then(Commands.literal(fuelLiteral)
@@ -49,6 +49,13 @@ public final class FurnaceCommands {
                         .then(Commands.argument("amount", IntegerArgumentType.integer(8, 64))
                                 .executes(ctx -> setGlobal(ctx.getSource(),
                                         IntegerArgumentType.getInteger(ctx, "amount")))))
+                .then(Commands.literal(detectionLiteral)
+                        .executes(ctx -> showGlobalDetection(ctx.getSource()))
+                        .then(Commands.argument("blocks", IntegerArgumentType.integer(16, 128))
+                                .executes(ctx -> setGlobalDetection(ctx.getSource(),
+                                        IntegerArgumentType.getInteger(ctx, "blocks"))))
+                        .then(Commands.literal("reset")
+                                .executes(ctx -> setGlobalDetection(ctx.getSource(), 64))))
                 .then(Commands.literal("reset")
                         .executes(ctx -> setGlobal(ctx.getSource(), 8)))
                 .then(Commands.argument("name", StringArgumentType.string())
@@ -61,6 +68,16 @@ public final class FurnaceCommands {
                                         .executes(ctx -> setNamed(ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "name"),
                                                 IntegerArgumentType.getInteger(ctx, "amount")))))
+                        .then(Commands.literal(detectionLiteral)
+                                .executes(ctx -> showNamedDetection(ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "name")))
+                                .then(Commands.argument("blocks", IntegerArgumentType.integer(16, 128))
+                                        .executes(ctx -> setNamedDetection(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "name"),
+                                                IntegerArgumentType.getInteger(ctx, "blocks"))))
+                                .then(Commands.literal("reset")
+                                        .executes(ctx -> setNamedDetection(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "name"), null))))
                         .then(Commands.literal("reset")
                                 .executes(ctx -> setNamed(ctx.getSource(),
                                         StringArgumentType.getString(ctx, "name"), null))));
@@ -110,6 +127,56 @@ public final class FurnaceCommands {
                 + (personal == null ? " (global)" : " (individual)")
                 + ". Bloco de carvão: 1."), false);
         return 1;
+    }
+
+    private static int showGlobalDetection(CommandSourceStack src) {
+        src.sendSuccess(() -> Component.literal(
+                "Detecção do Fornalheiro / Furnace Tender: "
+                + ServerFurnaceSettings.globalDetection() + " blocos horizontais, "
+                + com.anantaya.smartcgolem.ai.FurnaceSearch.VERTICAL_RANGE + " na vertical."
+                + " Apenas fornalhas em chunks carregados, dentro da área do golem."), false);
+        return 1;
+    }
+
+    private static int showNamedDetection(CommandSourceStack src, String name) {
+        CopperGolem golem = findNamed(src, name);
+        if (golem == null) return 0;
+        Integer personal = ServerFurnaceSettings.individualDetection(golem.getUUID());
+        src.sendSuccess(() -> Component.literal(
+                "Fornalheiro " + name + ": detecção "
+                + ServerFurnaceSettings.detection(golem.getUUID()) + " blocos"
+                + (personal == null ? " (global)." : " (individual).")), false);
+        return 1;
+    }
+
+    private static int setGlobalDetection(CommandSourceStack src, int radius) {
+        try {
+            ServerFurnaceSettings.setGlobalDetection(radius);
+            src.sendSuccess(() -> Component.literal(
+                    "Fornalheiros: detecção global configurada para "
+                    + radius + " blocos (somente chunks carregados)."), true);
+            return 1;
+        } catch (IOException | IllegalArgumentException ex) {
+            src.sendFailure(Component.literal("Falha na detecção: " + ex.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int setNamedDetection(CommandSourceStack src, String name, Integer radius) {
+        CopperGolem golem = findNamed(src, name);
+        if (golem == null) return 0;
+        try {
+            ServerFurnaceSettings.setIndividualDetection(golem.getUUID(), radius);
+            int applied = ServerFurnaceSettings.detection(golem.getUUID());
+            src.sendSuccess(() -> Component.literal(
+                    "Fornalheiro " + name + ": detecção de "
+                    + applied + " blocos"
+                    + (radius == null ? " (global restaurada)." : " (individual).")), true);
+            return 1;
+        } catch (IOException | IllegalArgumentException ex) {
+            src.sendFailure(Component.literal("Falha na detecção: " + ex.getMessage()));
+            return 0;
+        }
     }
 
     private static int setGlobal(CommandSourceStack src, int target) {
