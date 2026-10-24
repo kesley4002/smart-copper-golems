@@ -130,7 +130,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private long cropRouteStartTick = 0L;
     private long compostRouteStartTick = 0L;
     private long nextCompostProbeTick = 0L;
-    private static final long COMPOST_PROBE_INTERVAL = 80L;
+    private static final long COMPOST_PROBE_INTERVAL = 60L;
     private static final int CROP_ROUTE_TIMEOUT_TICKS = 240;
     private static final int GROUND_COLLECT_HORIZONTAL = 16;
     private static final int GROUND_COLLECT_VERTICAL = 5;
@@ -1047,25 +1047,38 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private record CompostInput(BlockPos containerPos, int slot) {}
 
     /**
-     * Only an explicitly marked chest/barrel within two blocks of the
-     * composter can donate surplus. In particular, unrelated storage
-     * containers never become compost fuel.
+     * A composter workstation can read the EXISTING ordinary item frame
+     * filter from a nearby agricultural chest. The 90-degree composter
+     * marker remains supported as an optional dedicated compost source.
+     * Opt-in /scg farmer compost on and stock reserve are still required.
+     */
+    private boolean isAuthorizedCompostInput(ServerLevel level, BlockPos pos, ItemStack candidate) {
+        if (ItemFrameHelper.hasSourceMarker(level, pos)) return false;
+        if (ItemFrameHelper.hasCompostSourceMarker(level, pos)) return true;
+        ItemFrameHelper.FilterResult filter = ItemFrameHelper.filter(level, pos, candidate);
+        return filter.hasFrame() && filter.matchesHeld();
+    }
+
+    /**
+     * Only a filtered chest/barrel close to the composter donates surplus.
+     * A composter block itself NEVER needs an item frame.
      */
     private CompostInput findCompostInput(ServerLevel level, CopperGolem golem,
                                          BlockPos composter) {
         int reserve = ServerFarmerSettings.reserve();
         for (BlockPos p : BlockPos.betweenClosed(
-                composter.offset(-2, -1, -2), composter.offset(2, 1, 2))) {
+                composter.offset(-3, -1, -3), composter.offset(3, 1, 3))) {
             if (level.getChunkSource().getChunkNow(Math.floorDiv(p.getX(), 16),
                     Math.floorDiv(p.getZ(), 16)) == null
                     || !ServerWorkZoneSettings.contains(golem, level, p)) continue;
-            if (!ItemFrameHelper.hasCompostSourceMarker(level, p)) continue;
+            if (ItemFrameHelper.hasSourceMarker(level, p)) continue;
             BaseContainerBlockEntity block = getDestinationBlockEntity(level, p);
             if (block == null) continue;
             Container container = getActualContainer(level, p, block);
             for (int slot = 0; slot < container.getContainerSize(); slot++) {
                 ItemStack stack = container.getItem(slot);
                 if (FarmerCompostPolicy.eligible(stack)
+                        && isAuthorizedCompostInput(level, p, stack)
                         && FarmerCompostPolicy.canConsumeOne(
                                 FarmerCompostPolicy.totalIn(container, stack), reserve))
                     return new CompostInput(p.immutable(), slot);
@@ -1127,11 +1140,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (input != null && !tryLockChest(level.dimension(), input.containerPos(), time)) {
                 try {
                     BaseContainerBlockEntity chest = getDestinationBlockEntity(level, input.containerPos());
-                    if (chest != null && ItemFrameHelper.hasCompostSourceMarker(level, input.containerPos())) {
+                    if (chest != null && !ItemFrameHelper.hasSourceMarker(level, input.containerPos())) {
                         Container container = getActualContainer(level, input.containerPos(), chest);
                         if (input.slot() < container.getContainerSize()) {
                             ItemStack stored = container.getItem(input.slot());
                             if (FarmerCompostPolicy.eligible(stored)
+                                    && isAuthorizedCompostInput(level, input.containerPos(), stored)
                                     && FarmerCompostPolicy.canConsumeOne(
                                             FarmerCompostPolicy.totalIn(container, stored),
                                             ServerFarmerSettings.reserve())) {
