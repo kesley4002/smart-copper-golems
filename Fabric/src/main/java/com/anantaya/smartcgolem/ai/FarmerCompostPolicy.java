@@ -2,7 +2,6 @@ package com.anantaya.smartcgolem.ai;
 
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.ComposterBlock;
 import net.minecraft.world.Container;
 
 /** All seeds and crops retain a floor in their designated compost bin. */
@@ -15,7 +14,7 @@ public final class FarmerCompostPolicy {
         boolean crop = stack.is(Items.WHEAT_SEEDS) || stack.is(Items.BEETROOT_SEEDS)
                 || stack.is(Items.WHEAT) || stack.is(Items.CARROT)
                 || stack.is(Items.POTATO) || stack.is(Items.BEETROOT);
-        return crop && ComposterBlock.getValue(stack) > 0.0F;
+        return crop;
     }
 
     public static int totalIn(Container container, ItemStack item) {
