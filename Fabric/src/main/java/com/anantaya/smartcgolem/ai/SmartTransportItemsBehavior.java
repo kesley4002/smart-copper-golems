@@ -1571,6 +1571,88 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         abandonFuelTrip(mob,time);
     }
 
+    private boolean isShepherd(PathfinderMob mob) {
+        if (!(mob instanceof CopperGolem golem)) return false;
+        return GolemProfession.fromName(
+                golem.getCustomName() == null ? null : golem.getCustomName().getString())
+                == GolemProfession.PASTOR;
+    }
+
+    /** Do not shear sheep when there is no storage for the wool color. */
+    private boolean hasWoolStorage(ServerLevel level, CopperGolem golem, ItemStack sample) {
+        for (BlockPos pos : StorageFrameIndex.destinations(level, sample)) {
+            if (!ServerWorkZoneSettings.contains(golem, level, pos)
+                    || ItemFrameHelper.hasSourceMarker(level, pos)) continue;
+            BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
+            if (chest == null) continue;
+            FrameFilterResult filter = getFrameFilterResult(level, pos, sample);
+            if (!GolemRoutingRules.accepts(filter.hasFrame(), filter.matchesHeld(), false)) continue;
+            // Legacy hasSpaceFor returns TRUE if there is no room.
+            if (!hasSpaceFor(getActualContainer(level, pos, chest), sample)) return true;
+        }
+        return false;
+    }
+
+    /** Nearby unsheared adults, restricted to the golem's existing work zone. */
+    private Sheep findWoolSheep(ServerLevel level, CopperGolem golem) {
+        BlockPos center = golem.blockPosition();
+        AABB area = new AABB(center).inflate(SHEEP_SEARCH_RADIUS, SHEEP_SEARCH_VERTICAL,
+                SHEEP_SEARCH_RADIUS);
+        Sheep nearest = null;
+        double closest = Double.MAX_VALUE;
+        for (Sheep sheep : level.getEntitiesOfClass(Sheep.class, area)) {
+            if (!sheep.isAlive() || !sheep.readyForShearing()
+                    || !ServerWorkZoneSettings.contains(golem, level, sheep.blockPosition()))
+                continue;
+            if (!hasWoolStorage(level, golem,
+                    new ItemStack(ShepherdWool.woolFor(sheep.getColor())))) continue;
+            double distance = golem.distanceToSqr(sheep);
+            if (distance >= closest) continue;
+            if (distance > 4.0D) {
+                Path path = golem.getNavigation().createPath(sheep.blockPosition(), 1);
+                if (path == null || !path.canReach()) continue;
+            }
+            nearest = sheep;
+            closest = distance;
+        }
+        return nearest;
+    }
+
+    private void approachAndShearSheep(ServerLevel level, PathfinderMob mob, long gameTime) {
+        Sheep sheep = targetSheep;
+        if (!(mob instanceof CopperGolem golem) || !isShepherd(mob)
+                || sheep == null || !sheep.isAlive() || sheep.level() != level
+                || !sheep.readyForShearing() || !mob.getMainHandItem().isEmpty()
+                || !ServerWorkZoneSettings.contains(golem, level, sheep.blockPosition())
+                || gameTime - sheepWalkStartTick > SHEEP_PATH_TIMEOUT) {
+            targetSheep = null;
+            mob.getNavigation().stop();
+            switchState(mob, TaskState.IDLE, null, gameTime);
+            return;
+        }
+        // Sheep move within a pen. Follow their current location, not the
+        // location at the moment this job was selected.
+        BlockPos sheepPosition = sheep.blockPosition().immutable();
+        currentTarget = sheepPosition;
+        currentWalkTarget = sheepPosition;
+        if (mob.distanceToSqr(sheep) > 3.24D
+                || !mob.getSensing().hasLineOfSight(sheep)) {
+            BehaviorUtils.setWalkAndLookTargetMemories(mob, sheepPosition, speedModifier, 0);
+            return;
+        }
+        if (hasWoolStorage(level, golem,
+                new ItemStack(ShepherdWool.woolFor(sheep.getColor())))) {
+            mob.getNavigation().stop();
+            // Native shearing: drops the sheep's real color of wool, leaves
+            // the sheep alive and lets it regenerate wool after eating grass.
+            sheep.shear(level, SoundSource.NEUTRAL, new ItemStack(Items.SHEARS));
+            golem.swing(InteractionHand.MAIN_HAND);
+            nextSearchTick = gameTime + 1L;
+        }
+        targetSheep = null;
+        switchState(mob, TaskState.IDLE, null, gameTime);
+    }
+
     private boolean isFarmer(PathfinderMob mob) {
         if (!(mob instanceof CopperGolem golem)) return false;
         return GolemProfession.fromName(
