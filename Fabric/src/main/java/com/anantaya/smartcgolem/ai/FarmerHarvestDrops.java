@@ -1,25 +1,31 @@
 package com.anantaya.smartcgolem.ai;
 
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 
 /**
- * Unlike the Collector, the Agricultor handles ONLY the output of the crops
- * it can harvest, plus bone meal produced by its composter. Mob drops such as
- * rotten flesh, arrows, bones and equipment belong to the Collector.
+ * Dedicated Farmer pickup allowlist. Ordinary Collectors retain their
+ * original ability to collect all items, including mob loot.
  */
 public final class FarmerHarvestDrops {
     private FarmerHarvestDrops() {}
 
     public static boolean allowed(ItemStack stack) {
-        if (stack.isEmpty()) return false;
-        return stack.is(Items.WHEAT)
-                || stack.is(Items.WHEAT_SEEDS)
-                || stack.is(Items.CARROT)
-                || stack.is(Items.POTATO)
-                || stack.is(Items.POISONOUS_POTATO)
-                || stack.is(Items.BEETROOT)
-                || stack.is(Items.BEETROOT_SEEDS)
-                || stack.is(Items.BONE_MEAL);
+        return !stack.isEmpty()
+                && allowedItemId(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+    }
+
+    /** Pure policy; testable in JUnit without bootstrapping Minecraft registries. */
+    public static boolean allowedItemId(String itemId) {
+        if (itemId == null) return false;
+        return switch (itemId) {
+            case "minecraft:wheat", "minecraft:wheat_seeds",
+                 "minecraft:carrot", "minecraft:potato",
+                 "minecraft:poisonous_potato", "minecraft:beetroot",
+                 "minecraft:beetroot_seeds",
+                 // A composter produces bone meal as a physical item.
+                 "minecraft:bone_meal" -> true;
+            default -> false;
+        };
     }
 }
