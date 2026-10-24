@@ -59,6 +59,16 @@ public final class ItemFrameHelper {
                 frame.getRotation() == 0 && frame.getItem().is(Items.STICK));
     }
 
+    /**
+     * A composter item rotated 90 degrees identifies an opt-in compost input
+     * chest/barrel. It does not replace the ordinary 0/45-degree destination
+     * frames that accept harvest drops.
+     */
+    public static boolean hasCompostSourceMarker(ServerLevel level, BlockPos pos) {
+        return frames(level, pos).stream().anyMatch(frame ->
+                frame.getRotation() == 2 && frame.getItem().is(Items.COMPOSTER));
+    }
+
     public record FilterResult(boolean hasFrame, boolean matchesHeld, ItemStack matchedFrameItem) {}
 
     public static FilterResult filter(ServerLevel level, BlockPos pos, ItemStack held) {
