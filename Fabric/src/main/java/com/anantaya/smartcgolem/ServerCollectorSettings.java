@@ -25,8 +25,11 @@ public final class ServerCollectorSettings {
 
     public static String itemFilter(UUID golem) { return ITEM_FILTERS.get(golem); }
     public static boolean accepts(UUID golem, String itemId) {
-        String wanted = ITEM_FILTERS.get(golem);
-        return wanted == null || wanted.equals(itemId);
+        return matches(ITEM_FILTERS.get(golem), itemId);
+    }
+
+    public static boolean matches(String wanted, String actual) {
+        return wanted == null || wanted.equals(actual);
     }
 
     public static void load(MinecraftServer server) {
