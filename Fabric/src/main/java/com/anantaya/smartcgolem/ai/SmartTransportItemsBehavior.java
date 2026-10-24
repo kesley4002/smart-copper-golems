@@ -395,7 +395,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     return;
                 }
 
-                if (hasArrived(mob)) {
+                if (hasArrived(mob)
+                        || (isFarmer(mob) && currentTarget != null
+                            && isFarmerNearStorage(mob, currentTarget))) {
                     switchState(mob, TaskState.WAIT_FOR_DESTINATION, currentTarget, gameTime);
                 }
             }
@@ -418,7 +420,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 // Farmer must physically approach the chest; other professions
                 // keep their existing distant transport behavior.
                 if (isFarmer(mob) && !isFarmerNearStorage(mob, currentTarget)) {
-                    startStretchNearElevatedChest(level, mob, gameTime);
+                    if (startStretchNearElevatedChest(level, mob, gameTime)) return;
+                    if (gameTime % 20L == 0L)
+                        currentWalkTarget = findBestWalkTargetForChest(mob, currentTarget);
                     return;
                 }
                 if (isChestLocked(level.dimension(), currentTarget, gameTime) && !isChestBusy(chest)) {
@@ -954,9 +958,24 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             return;
         }
 
-        // Farmers must clear harvest drops BEFORE picking the next mature crop.
-        // Both ground-item professions use the Collector's validated sorting
-        // pipeline; only unnamed/Organizer golems use source chest pickup.
+        // Periodic compost service must not be starved by a constant stream
+        // of crop drops. Reserve one short service window every few seconds;
+        // all other idle cycles prioritize collecting agricultural drops.
+        if (!carrying && isFarmer(mob) && ServerFarmerSettings.compostEnabled()
+                && gameTime >= nextCompostProbeTick) {
+            nextCompostProbeTick = gameTime + COMPOST_PROBE_INTERVAL;
+            BlockPos composter = findServiceableComposter(level, (CopperGolem) mob);
+            if (composter != null) {
+                currentTarget = composter;
+                currentWalkTarget = findFarmerComposterApproach(mob, composter);
+                compostRouteStartTick = gameTime;
+                taskState = TaskState.WALK_TO_COMPOSTER;
+                return;
+            }
+        }
+
+        // Collector still gathers all items. Farmer takes ONLY crops/seeds
+        // from its own plant list and bone meal from the composter.
         if (!carrying && collectsGroundDrops(mob)) {
             ItemEntity item = findGroundItem(level, mob);
             if (item != null) {
@@ -968,20 +987,6 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 return;
             }
             if (isFarmer(mob)) {
-                // Harvest drops have first priority. Service a composter
-                // periodically before choosing more crops, otherwise a farm
-                // with constantly ripe plants starves this workstation.
-                if (ServerFarmerSettings.compostEnabled() && gameTime >= nextCompostProbeTick) {
-                    nextCompostProbeTick = gameTime + COMPOST_PROBE_INTERVAL;
-                    BlockPos composter = findServiceableComposter(level, (CopperGolem) mob);
-                    if (composter != null) {
-                        currentTarget = composter;
-                        currentWalkTarget = findBestWalkTargetForChest(mob, composter);
-                        compostRouteStartTick = gameTime;
-                        taskState = TaskState.WALK_TO_COMPOSTER;
-                        return;
-                    }
-                }
                 BlockPos crop = FarmerHarvest.findCrop(level, (CopperGolem) mob);
                 if (crop != null) {
                     currentTarget = crop;
@@ -1012,6 +1017,25 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             System.out.println("[SMART-GOLEM SOURCE] Selected source chest=" + best);
             switchState(mob, TaskState.WALK_TO_SOURCE, best, gameTime);
         }
+    }
+
+    /** Search accessible standing blocks BESIDE the composter, not inside it. */
+    private BlockPos findFarmerComposterApproach(PathfinderMob mob, BlockPos station) {
+        BlockPos best = null;
+        double bestCost = Double.MAX_VALUE;
+        for (BlockPos near : BlockPos.betweenClosed(
+                station.offset(-1, -1, -1), station.offset(1, 1, 1))) {
+            if (near.getX() == station.getX() && near.getZ() == station.getZ()) continue;
+            Path path = mob.getNavigation().createPath(near, 1);
+            if (path == null || !path.canReach()) continue;
+            double cost = path.getNodeCount()
+                    + 0.2D * mob.blockPosition().distSqr(near);
+            if (cost < bestCost) {
+                bestCost = cost;
+                best = near.immutable();
+            }
+        }
+        return best == null ? findBestWalkTargetForChest(mob, station) : best;
     }
 
     /** Nearby composter workstation; deliberately no chunk loading. */
@@ -1093,8 +1117,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             BaseContainerBlockEntity block = getDestinationBlockEntity(level, p);
             if (block == null) continue;
             ItemFrameHelper.FilterResult filter = ItemFrameHelper.filter(level, p, boneMeal);
+            // Legacy hasSpaceFor returns FALSE when any inventory space exists.
             if (filter.hasFrame() && filter.matchesHeld()
-                    && !hasSpaceFor(getActualContainer(level, p, block), boneMeal)) return true;
+                    && !hasSpaceFor(getActualContainer(level, p, block), boneMeal)
+                    && farmerCanApproachStorage(golem, p)) return true;
         }
         return false;
     }
@@ -1117,7 +1143,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         double dz = mob.getZ() - (station.getZ() + 0.5D);
         if (dx * dx + dz * dz > 3.24D
                 || Math.abs(mob.getY() - station.getY()) > 1.5D) {
-            currentWalkTarget = findBestWalkTargetForChest(mob, station);
+            if (currentWalkTarget == null || (time - compostRouteStartTick) % 40L == 0L)
+                currentWalkTarget = findFarmerComposterApproach(mob, station);
             walkToTarget(mob, time);
             return;
         }
@@ -1170,6 +1197,29 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         nextSearchTick = time + 12L;
         nextCompostProbeTick = time + 20L;
         switchState(mob, TaskState.IDLE, null, time);
+    }
+
+    /**
+     * Reject unreachable ordinary chest targets when choosing a destination
+     * for a Farmer. Never trap freshly collected crops in its hand behind a
+     * fence or wall. For distant storage, short-hop navigation can bring
+     * the Farmer close before checking the last path segment.
+     */
+    private boolean farmerCanApproachStorage(PathfinderMob mob, BlockPos storage) {
+        if (isFarmerNearStorage(mob, storage)
+                || nearElevatedFarmerStorage(mob, storage)) return true;
+        // The vanilla path planner cannot plan hundreds of blocks at once.
+        // Preserve the existing waypoint support for distant depots.
+        if (mob.blockPosition().distSqr(storage) > 24 * 24) return true;
+        if (getPathCost(mob, storage) != Double.MAX_VALUE) return true;
+
+        // A chest 2-5 blocks up is reached by walking horizontally next
+        // to it and then using the existing telescopic animation.
+        int height = storage.getY() - mob.blockPosition().getY();
+        if (height < 2 || height > 5) return false;
+        BlockPos adjacentAtFeet = new BlockPos(storage.getX(),
+                mob.blockPosition().getY(), storage.getZ());
+        return getPathCost(mob, adjacentAtFeet) != Double.MAX_VALUE;
     }
 
     /** A natural chest interaction must occur beside the storage block. */
@@ -1268,6 +1318,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 || item.getItem().isEmpty()
                 || !ServerWorkZoneSettings.contains(golem, level, item.blockPosition())) return false;
         ItemStack sample = item.getItem();
+        if (isFarmer(mob) && !FarmerHarvestDrops.allowed(sample)) return false;
         for (BlockPos pos : StorageFrameIndex.destinations(level, sample)) {
             if (!ServerWorkZoneSettings.contains(golem, level, pos)
                     || ItemFrameHelper.hasSourceMarker(level, pos)) continue;
@@ -1275,7 +1326,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (chest == null) continue;
             FrameFilterResult filter = getFrameFilterResult(level, pos, sample);
             if (!GolemRoutingRules.accepts(filter.hasFrame(), filter.matchesHeld(), false)) continue;
-            if (!hasSpaceFor(getActualContainer(level, pos, chest), sample)) return true;
+            if (hasSpaceFor(getActualContainer(level, pos, chest), sample)) continue;
+            // A Farmer may only pick a drop if there is a physically
+            // reachable destination. Other professions preserve their
+            // original routing behavior (including distant fallbacks).
+            if (isFarmer(mob) && !farmerCanApproachStorage(mob, pos)) continue;
+            return true;
         }
         return false;
     }
@@ -1445,6 +1501,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (!GolemRoutingRules.accepts(filter.hasFrame(), filter.matchesHeld(), false)) continue;
             Container actual = getActualContainer(level, pos, chest);
             if (hasSpaceFor(actual, held)) continue;
+            if (isFarmer(mob) && !farmerCanApproachStorage(mob, pos)) continue;
             double pathCost = getPathCost(mob, pos);
             boolean reachable = pathCost != Double.MAX_VALUE;
             // Even when directly above a basement chest, keep it selected:
