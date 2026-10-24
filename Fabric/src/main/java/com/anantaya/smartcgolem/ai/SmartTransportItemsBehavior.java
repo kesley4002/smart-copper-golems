@@ -25,6 +25,7 @@ import net.minecraft.world.entity.animal.sheep.Sheep;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.ai.behavior.Behavior;
@@ -807,7 +808,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         if (!actionDone) {
 
-            mob.swing(InteractionHand.MAIN_HAND);
+            mob.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT);
 
             boolean movedItem = false;
 
@@ -919,7 +920,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         if (!actionDone) {
 
-            mob.swing(InteractionHand.MAIN_HAND);
+            mob.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT);
 
             boolean movedItem = false;
 
@@ -1282,7 +1283,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             level.blockEntityChanged(source);
             mob.setItemInHand(InteractionHand.MAIN_HAND, carried);
             carryingForCompost = true;
-            golem.swing(InteractionHand.MAIN_HAND);
+            golem.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT);
         } finally {
             unlockChest();
         }
@@ -1344,7 +1345,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 ComposterBlock.insertItem(golem, state, level,
                         mob.getMainHandItem().copyWithCount(1), station);
                 mob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
-                golem.swing(InteractionHand.MAIN_HAND);
+                golem.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT);
             }
             // If the composter filled up meanwhile, keep the held crop to
             // deposit normally, instead of deleting or duplicating it.
@@ -1353,7 +1354,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             // up and stored using the Farmer's ordinary framed-chest routing.
             if (hasBoneMealDestination(level, golem)) {
                 ComposterBlock.extractProduce(golem, state, level, station);
-                golem.swing(InteractionHand.MAIN_HAND);
+                golem.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT);
                 nextSearchTick = time + 1L;
             }
         } else if (fill < ComposterBlock.MAX_LEVEL) {
@@ -1548,7 +1549,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             block.setChanged();
             level.blockEntityChanged(trip.supply());
             mob.setItemInHand(InteractionHand.MAIN_HAND,taken);
-            golem.swing(InteractionHand.MAIN_HAND);
+            golem.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT);
         } finally {
             unlockChest();
         }
@@ -1597,7 +1598,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                         held.isEmpty() ? ItemStack.EMPTY : held);
                 furnace.setChanged();
                 level.blockEntityChanged(trip.furnace());
-                golem.swing(InteractionHand.MAIN_HAND);
+                golem.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT);
             }
         }
         abandonFuelTrip(mob,time);
@@ -1678,7 +1679,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             mob.getNavigation().stop();
             // Native shearing: the physical wool is dropped at sheep's feet.
             sheep.shear(level, SoundSource.NEUTRAL, new ItemStack(Items.SHEARS));
-            golem.swing(InteractionHand.MAIN_HAND);
+            golem.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT);
             ShepherdShears.hideIfVirtual(golem);
             woolPickupPending = true;
             woolPickupPendingSince = gameTime;
@@ -1725,7 +1726,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         mob.getNavigation().stop();
         if (FarmerHarvest.harvest(level, golem, crop)) {
-            golem.swing(InteractionHand.MAIN_HAND);
+            golem.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT);
             // Allow immediate next-tick discovery of the just-generated
             // drops rather than waiting for the standard five-second poll.
             nextSearchTick = gameTime + 1L;
