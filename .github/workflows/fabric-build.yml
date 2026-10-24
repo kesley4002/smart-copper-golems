@@ -30,7 +30,10 @@ jobs:
           assert len(jars) == 1, jars;
           meta = json.loads(zipfile.ZipFile(jars[0]).read("fabric.mod.json"));
           assert meta["environment"] == "*", meta;
-          print("Fabric metadata allows singleplayer and dedicated server:", jars[0])'
+          assert meta["depends"]["minecraft"] == "~26.3", meta["depends"];
+          assert meta["depends"]["fabricloader"] == ">=0.19.5", meta["depends"];
+          assert "+mc26.3-" in meta["version"], meta["version"];
+          print("Verified 26.3-only Fabric metadata, singleplayer and dedicated server:", jars[0])'
       - name: Validate all 1413 catalog entries packaged into Fabric JAR
         run: |
           python3 - <<'PY'
