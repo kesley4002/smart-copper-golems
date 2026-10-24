@@ -123,6 +123,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     // chest-routing state machine remains active for unnamed organizers.
     private ItemEntity targetGroundItem = null;
     private long groundItemSearchStartTick = 0L;
+    private long cropRouteStartTick = 0L;
+    private static final int CROP_ROUTE_TIMEOUT_TICKS = 240;
     private static final int GROUND_COLLECT_HORIZONTAL = 16;
     private static final int GROUND_COLLECT_VERTICAL = 5;
     private static final int GROUND_COLLECT_TIMEOUT_TICKS = 200;
@@ -339,19 +341,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
             case WALK_TO_ITEM -> collectGroundItem(level, mob, gameTime);
 
-            case WALK_TO_CROP -> {
-                if (!(mob instanceof CopperGolem golem) || !isFarmer(mob)
-                        || currentTarget == null || !mob.getMainHandItem().isEmpty()) {
-                    switchState(mob, TaskState.IDLE, null, gameTime);
-                } else if (mob.blockPosition().distSqr(currentTarget) <= 9) {
-                    if (FarmerHarvest.harvest(level, golem, currentTarget)) {
-                        golem.swing(InteractionHand.MAIN_HAND);
-                    }
-                    switchState(mob, TaskState.IDLE, null, gameTime);
-                } else {
-                    walkToTarget(mob, gameTime);
-                }
-            }
+            case WALK_TO_CROP -> walkToCrop(level, mob, gameTime);
 
             case WALK_TO_SOURCE -> {
                 walkToTarget(mob, gameTime);
@@ -937,16 +927,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             return;
         }
 
-        // Only the Collector profession replaces chest pickup with ground
-        // pickup. Unnamed golems and all other names keep original sorting.
-        if (!carrying && isFarmer(mob)) {
-            BlockPos crop = FarmerHarvest.findCrop(level, (CopperGolem) mob);
-            if (crop != null && mob.getNavigation().createPath(crop, 1) != null) {
-                switchState(mob, TaskState.WALK_TO_CROP, crop, gameTime);
-                return;
-            }
-        }
-        if (!carrying && (isCollector(mob) || isFarmer(mob))) {
+        // Farmers must clear harvest drops BEFORE picking the next mature crop.
+        // Both ground-item professions use the Collector's validated sorting
+        // pipeline; only unnamed/Organizer golems use source chest pickup.
+        if (!carrying && collectsGroundDrops(mob)) {
             ItemEntity item = findGroundItem(level, mob);
             if (item != null) {
                 targetGroundItem = item;
@@ -954,6 +938,18 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 currentTarget = item.blockPosition().immutable();
                 currentWalkTarget = currentTarget;
                 taskState = TaskState.WALK_TO_ITEM;
+                return;
+            }
+            if (isFarmer(mob)) {
+                BlockPos crop = FarmerHarvest.findCrop(level, (CopperGolem) mob);
+                if (crop != null) {
+                    // Crop targets are NOT chests. Do not pick an adjacent
+                    // chest-access waypoint, which allowed remote harvesting.
+                    currentTarget = crop;
+                    currentWalkTarget = crop;
+                    cropRouteStartTick = gameTime;
+                    taskState = TaskState.WALK_TO_CROP;
+                }
             }
             return;
         }
@@ -985,11 +981,42 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 == GolemProfession.AGRICULTOR;
     }
 
-    private boolean isCollector(PathfinderMob mob) {
+    private boolean collectsGroundDrops(PathfinderMob mob) {
         if (!(mob instanceof CopperGolem golem)) return false;
         return GolemProfession.fromName(
                 golem.getCustomName() == null ? null : golem.getCustomName().getString())
-                == GolemProfession.COLETOR;
+                .collectsGroundDrops();
+    }
+
+    private void walkToCrop(ServerLevel level, PathfinderMob mob, long gameTime) {
+        BlockPos crop = currentTarget;
+        if (!(mob instanceof CopperGolem golem) || !isFarmer(mob)
+                || !mob.getMainHandItem().isEmpty()
+                || crop == null
+                || !ServerWorkZoneSettings.contains(golem, level, crop)
+                || !FarmerHarvest.isRipeAndFarmland(level, crop)
+                || gameTime - cropRouteStartTick >= CROP_ROUTE_TIMEOUT_TICKS) {
+            mob.getNavigation().stop();
+            switchState(mob, TaskState.IDLE, null, gameTime);
+            return;
+        }
+
+        // Revalidate proximity every tick. Never harvest from three blocks
+        // away or through an unreachable obstruction.
+        if (!FarmerHarvest.canHarvestNearby(golem, crop)) {
+            currentWalkTarget = crop;
+            BehaviorUtils.setWalkAndLookTargetMemories(mob, crop, speedModifier, 0);
+            return;
+        }
+
+        mob.getNavigation().stop();
+        if (FarmerHarvest.harvest(level, golem, crop)) {
+            golem.swing(InteractionHand.MAIN_HAND);
+            // Allow immediate next-tick discovery of the just-generated
+            // drops rather than waiting for the standard five-second poll.
+            nextSearchTick = gameTime + 1L;
+        }
+        switchState(mob, TaskState.IDLE, null, gameTime);
     }
 
     /**
@@ -1007,7 +1034,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (distance >= bestDistance) continue;
             // Avoid choosing an isolated item behind an inaccessible barrier.
             Path path = mob.getNavigation().createPath(item.blockPosition(), 1);
-            if (path == null || !path.canReach()) continue;
+            if (path == null || !path.canReach()) {
+                // Fresh crop drops often land inside a replanted crop block.
+                // If the Farmer is already standing beside the drop, no path
+                // computation is needed to reach it. Do not relax Collector AI.
+                if (!isFarmer(mob) || distance > 2.25D) continue;
+            }
             best = item;
             bestDistance = distance;
         }
@@ -1046,7 +1078,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
     private void collectGroundItem(ServerLevel level, PathfinderMob mob, long gameTime) {
         ItemEntity item = targetGroundItem;
-        if (item == null || !isCollector(mob) || !mob.getMainHandItem().isEmpty()
+        if (item == null || !collectsGroundDrops(mob) || !mob.getMainHandItem().isEmpty()
                 || gameTime - groundItemSearchStartTick > GROUND_COLLECT_TIMEOUT_TICKS
                 || !canCollectGroundItem(level, mob, item)) {
             cancelGroundCollection(mob);

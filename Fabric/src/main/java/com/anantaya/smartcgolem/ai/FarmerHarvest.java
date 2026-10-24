@@ -11,8 +11,9 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.pathfinder.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -25,21 +26,51 @@ import java.util.List;
 public final class FarmerHarvest {
     private FarmerHarvest() {}
 
+    private static final int SEARCH_HORIZONTAL = 12;
+    private static final int SEARCH_VERTICAL = 3;
+    private static final int MAX_PATH_CHECKS = 32;
+    private static final double REACH_HORIZONTAL_SQR = 1.21D; // ~1.1 blocks, truly adjacent
+
     public static BlockPos findCrop(ServerLevel level, CopperGolem golem) {
         BlockPos center = golem.blockPosition();
-        BlockPos best = null;
-        double bestDistance = Double.MAX_VALUE;
-        for (BlockPos p : BlockPos.betweenClosed(center.offset(-10, -3, -10),
-                                                   center.offset(10, 3, 10))) {
-            if (!level.hasChunkAt(p) || !ServerWorkZoneSettings.contains(golem, level, p)) continue;
-            if (!isHarvestable(level.getBlockState(p))) continue;
-            double distance = p.distSqr(center);
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                best = p.immutable();
-            }
+        List<BlockPos> ripe = new ArrayList<>();
+        for (BlockPos p : BlockPos.betweenClosed(
+                center.offset(-SEARCH_HORIZONTAL, -SEARCH_VERTICAL, -SEARCH_HORIZONTAL),
+                center.offset(SEARCH_HORIZONTAL, SEARCH_VERTICAL, SEARCH_HORIZONTAL))) {
+            // Never load terrain just to find a farm.
+            if (level.getChunkSource().getChunkNow(Math.floorDiv(p.getX(), 16),
+                    Math.floorDiv(p.getZ(), 16)) == null
+                    || !ServerWorkZoneSettings.contains(golem, level, p)) continue;
+            if (!isHarvestable(level.getBlockState(p))
+                    || !level.getBlockState(p.below()).is(Blocks.FARMLAND)) continue;
+            ripe.add(p.immutable());
         }
-        return best;
+        ripe.sort(Comparator.comparingDouble(p -> p.distSqr(center)));
+        int checks = 0;
+        for (BlockPos target : ripe) {
+            if (++checks > MAX_PATH_CHECKS) break;
+            // Walking is mandatory. Crop targets must be reachable, not just
+            // within the generous discovery volume.
+            if (canHarvestNearby(golem, target)) return target;
+            Path path = golem.getNavigation().createPath(target, 1);
+            if (path != null && path.canReach()) return target;
+        }
+        return null;
+    }
+
+    /** Golem must physically reach the crop, not remotely break blocks. */
+    public static boolean canHarvestNearby(CopperGolem golem, BlockPos pos) {
+        double dx = golem.getX() - (pos.getX() + 0.5D);
+        double dz = golem.getZ() - (pos.getZ() + 0.5D);
+        return dx * dx + dz * dz <= REACH_HORIZONTAL_SQR
+                && Math.abs(golem.getY() - pos.getY()) <= 1.5D;
+    }
+
+    public static boolean isRipeAndFarmland(ServerLevel level, BlockPos pos) {
+        return level.getChunkSource().getChunkNow(Math.floorDiv(pos.getX(), 16),
+                        Math.floorDiv(pos.getZ(), 16)) != null
+                && isHarvestable(level.getBlockState(pos))
+                && level.getBlockState(pos.below()).is(Blocks.FARMLAND);
     }
 
     private static boolean isHarvestable(BlockState state) {
@@ -60,10 +91,10 @@ public final class FarmerHarvest {
     }
 
     public static boolean harvest(ServerLevel level, CopperGolem golem, BlockPos pos) {
-        if (!level.hasChunkAt(pos) || !ServerWorkZoneSettings.contains(golem, level, pos)
-                || golem.blockPosition().distSqr(pos) > 9) return false;
+        if (!ServerWorkZoneSettings.contains(golem, level, pos)
+                || !canHarvestNearby(golem, pos)
+                || !isRipeAndFarmland(level, pos)) return false;
         BlockState state = level.getBlockState(pos);
-        if (!isHarvestable(state)) return false;
         if (!(state.getBlock() instanceof CropBlock crop)) return false;
         if (!level.getBlockState(pos.below()).is(Blocks.FARMLAND)) return false;
 

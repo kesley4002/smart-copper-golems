@@ -2,6 +2,8 @@ package com.anantaya.smartcgolem;
 
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 
 public class GolemProfessionTest {
     @Test
@@ -10,6 +12,13 @@ public class GolemProfessionTest {
         assertEquals(GolemProfession.COLETOR, GolemProfession.fromName("Coletor: João"));
         assertEquals(GolemProfession.COLETOR, GolemProfession.fromName("  COLETOR :  Ana  "));
         assertEquals(GolemProfession.COLETOR, GolemProfession.fromName("Collector: Alex"));
+    }
+
+    @Test
+    public void groundPickupIsSharedOnlyByDesignatedProfessions() {
+        assertTrue(GolemProfession.COLETOR.collectsGroundDrops());
+        assertTrue(GolemProfession.AGRICULTOR.collectsGroundDrops());
+        assertFalse(GolemProfession.ORGANIZADOR.collectsGroundDrops());
     }
 
     @Test
