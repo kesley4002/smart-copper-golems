@@ -1178,15 +1178,14 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private boolean isFarmerNearStorage(PathfinderMob mob, BlockPos pos) {
         double dx = mob.getX() - (pos.getX() + 0.5D);
         double dz = mob.getZ() - (pos.getZ() + 0.5D);
-        return dx * dx + dz * dz <= 3.24D
-                && Math.abs(mob.getY() - pos.getY()) <= 1.5D;
+        return FarmerStorageProximity.normal(dx, mob.getY() - pos.getY(), dz);
     }
 
     private boolean nearElevatedFarmerStorage(PathfinderMob mob, BlockPos pos) {
         int height = pos.getY() - mob.blockPosition().getY();
         double dx = mob.getX() - (pos.getX() + 0.5D);
         double dz = mob.getZ() - (pos.getZ() + 0.5D);
-        return height >= 2 && height <= 5 && dx * dx + dz * dz <= 3.24D;
+        return FarmerStorageProximity.elevated(dx, height, dz);
     }
 
     private boolean isFarmer(PathfinderMob mob) {
@@ -1898,7 +1897,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         if (height < 2 || height > 5) return false;
         double dx = mob.getX() - (currentTarget.getX() + 0.5);
         double dz = mob.getZ() - (currentTarget.getZ() + 0.5);
-        if (dx*dx + dz*dz > (isFarmer(mob) ? 3.24D : 9.0D)) return false;
+        if (isFarmer(mob)) {
+            if (!FarmerStorageProximity.elevated(dx, height, dz)) return false;
+        } else if (dx*dx + dz*dz > 9.0D) return false;
         // Validate frame and destination before commencing long animation.
         if (getDestinationBlockEntity(level, currentTarget) == null
                 || ItemFrameHelper.hasSourceMarker(level, currentTarget)) return false;
