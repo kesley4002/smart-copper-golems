@@ -19,6 +19,11 @@ public enum GolemProfession {
     COLETOR,
     AGRICULTOR;
 
+    /** Both professions collect loose items. Ordinary organizers do not. */
+    public boolean collectsGroundDrops() {
+        return this == COLETOR || this == AGRICULTOR;
+    }
+
     public static GolemProfession fromName(String customName) {
         if (customName == null || customName.isBlank()) return ORGANIZADOR;
         String normalized = Normalizer.normalize(customName, Normalizer.Form.NFD)
