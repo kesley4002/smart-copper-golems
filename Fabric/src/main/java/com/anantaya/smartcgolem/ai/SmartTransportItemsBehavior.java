@@ -21,6 +21,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.core.particles.ColorParticleOption;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.entity.animal.sheep.Sheep;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
@@ -80,6 +81,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         WALK_TO_SOURCE,
         WALK_TO_ITEM,
         WALK_TO_CROP,
+        WALK_TO_SHEEP,
         WALK_TO_COMPOST_SOURCE,
         WALK_TO_COMPOSTER,
         WALK_TO_FUEL_SOURCE,
@@ -134,6 +136,11 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private ItemEntity targetGroundItem = null;
     private long groundItemSearchStartTick = 0L;
     private long cropRouteStartTick = 0L;
+    private Sheep targetSheep = null;
+    private long sheepWalkStartTick = 0L;
+    private static final int SHEEP_SEARCH_RADIUS = 12;
+    private static final int SHEEP_SEARCH_VERTICAL = 4;
+    private static final long SHEEP_PATH_TIMEOUT = 240L;
     private long compostRouteStartTick = 0L;
     private BlockPos compostStation = null;
     private boolean carryingForCompost = false;
@@ -375,6 +382,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             case WALK_TO_ITEM -> collectGroundItem(level, mob, gameTime);
 
             case WALK_TO_CROP -> walkToCrop(level, mob, gameTime);
+            case WALK_TO_SHEEP -> approachAndShearSheep(level, mob, gameTime);
 
             case WALK_TO_COMPOST_SOURCE -> walkToCompostSource(level, mob, gameTime);
 
@@ -977,7 +985,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         }
 
         nextSearchTick = gameTime
-                + (isFarmer(mob) ? FARMER_SEARCH_COOLDOWN_TICKS
+                + ((isFarmer(mob) || isShepherd(mob)) ? FARMER_SEARCH_COOLDOWN_TICKS
                 : isFurnaceTender(mob) ? FURNACE_SEARCH_COOLDOWN_TICKS
                 : SEARCH_COOLDOWN_TICKS);
 
@@ -1032,6 +1040,17 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 currentWalkTarget = currentTarget;
                 taskState = TaskState.WALK_TO_ITEM;
                 return;
+            }
+            if (isShepherd(mob)) {
+                Sheep sheep = findWoolSheep(level, (CopperGolem) mob);
+                if (sheep != null) {
+                    targetSheep = sheep;
+                    sheepWalkStartTick = gameTime;
+                    currentTarget = sheep.blockPosition().immutable();
+                    currentWalkTarget = currentTarget;
+                    taskState = TaskState.WALK_TO_SHEEP;
+                    return;
+                }
             }
             if (isFarmer(mob)) {
                 BlockPos crop = FarmerHarvest.findCrop(level, (CopperGolem) mob);
@@ -1616,7 +1635,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 // Fresh crop drops often land inside a replanted crop block.
                 // If the Farmer is already standing beside the drop, no path
                 // computation is needed to reach it. Do not relax Collector AI.
-                if (!isFarmer(mob) || distance > 2.25D) continue;
+                if (!(isFarmer(mob) || isShepherd(mob)) || distance > 2.25D) continue;
             }
             best = item;
             bestDistance = distance;
@@ -1635,6 +1654,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 || !ServerWorkZoneSettings.contains(golem, level, item.blockPosition())) return false;
         ItemStack sample = item.getItem();
         if (isFarmer(mob) && !FarmerHarvestDrops.allowed(sample)) return false;
+        if (isShepherd(mob) && !ShepherdWool.accepts(sample)) return false;
         if (isCollector(mob) && !ServerCollectorSettings.accepts(
                 golem.getUUID(), BuiltInRegistries.ITEM.getKey(sample.getItem()).toString()))
             return false;
@@ -1649,7 +1669,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             // A Farmer may only pick a drop if there is a physically
             // reachable destination. Other professions preserve their
             // original routing behavior (including distant fallbacks).
-            if (isFarmer(mob) && !farmerCanApproachStorage(mob, pos)) continue;
+            if ((isFarmer(mob) || isShepherd(mob))
+                    && !farmerCanApproachStorage(mob, pos)) continue;
             return true;
         }
         return false;
@@ -1820,7 +1841,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (!GolemRoutingRules.accepts(filter.hasFrame(), filter.matchesHeld(), false)) continue;
             Container actual = getActualContainer(level, pos, chest);
             if (hasSpaceFor(actual, held)) continue;
-            if (isFarmer(mob) && !farmerCanApproachStorage(mob, pos)) continue;
+            if ((isFarmer(mob) || isShepherd(mob))
+                    && !farmerCanApproachStorage(mob, pos)) continue;
             double pathCost = getPathCost(mob, pos);
             boolean reachable = pathCost != Double.MAX_VALUE;
             // Even when directly above a basement chest, keep it selected:
