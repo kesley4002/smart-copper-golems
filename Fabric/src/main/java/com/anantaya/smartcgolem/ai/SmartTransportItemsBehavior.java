@@ -6,6 +6,7 @@ import com.anantaya.smartcgolem.util.SearchVolume;
 import com.anantaya.smartcgolem.ServerWorkZoneSettings;
 import com.anantaya.smartcgolem.GolemProfession;
 import com.anantaya.smartcgolem.ServerFarmerSettings;
+import com.anantaya.smartcgolem.ServerCollectorSettings;
 import com.anantaya.smartcgolem.util.ItemFrameHelper;
 import com.anantaya.smartcgolem.util.StorageFrameIndex;
 import com.anantaya.smartcgolem.util.GolemRoutingRules;
@@ -34,6 +35,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.entity.BarrelBlockEntity;
 import net.minecraft.world.level.block.entity.BaseContainerBlockEntity;
+import net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -79,6 +81,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         WALK_TO_CROP,
         WALK_TO_COMPOST_SOURCE,
         WALK_TO_COMPOSTER,
+        WALK_TO_FUEL_SOURCE,
+        WALK_TO_FURNACE,
         WAIT_FOR_SOURCE,
         INTERACT_SOURCE,
         WALK_TO_DESTINATION,
@@ -139,6 +143,13 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private static final int GROUND_COLLECT_VERTICAL = 5;
     private static final int GROUND_COLLECT_TIMEOUT_TICKS = 200;
     private BlockPos currentWalkTarget = null;
+    // Specialization-only furnace supply trip. Other professions never touch
+    // furnace input/output/fuel inventory slots.
+    private FuelTrip fuelTrip = null;
+    private long fuelTripStartTick = 0L;
+    private static final long FUEL_TRIP_TIMEOUT_TICKS = 480L;
+    private record FuelTrip(BlockPos furnace, BlockPos supply, ItemStack fuel,
+                            int sourceSlot, int count) {}
     private BlockPos cachedHopGoal = null;
     private BlockPos cachedHopTarget = null;
     private BlockPos cachedDescentGoal = null;
@@ -194,6 +205,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         currentTarget = null;
         currentWalkTarget = null;
         targetGroundItem = null;
+        fuelTrip = null;
         compostStation = null;
         carryingForCompost = false;
         openedContainer = null;
@@ -361,6 +373,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             case WALK_TO_COMPOST_SOURCE -> walkToCompostSource(level, mob, gameTime);
 
             case WALK_TO_COMPOSTER -> workAtComposter(level, mob, gameTime);
+
+            case WALK_TO_FUEL_SOURCE -> visitFuelSource(level, mob, gameTime);
+
+            case WALK_TO_FURNACE -> refillFurnace(level, mob, gameTime);
 
             case WALK_TO_SOURCE -> {
                 walkToTarget(mob, gameTime);
@@ -955,7 +971,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         }
 
         nextSearchTick = gameTime
-                + (isFarmer(mob) ? FARMER_SEARCH_COOLDOWN_TICKS : SEARCH_COOLDOWN_TICKS);
+                + ((isFarmer(mob) || isFurnaceTender(mob))
+                        ? FARMER_SEARCH_COOLDOWN_TICKS : SEARCH_COOLDOWN_TICKS);
 
         boolean carrying = !mob.getMainHandItem().isEmpty();
         if (!carrying && mob instanceof CopperGolem golem
@@ -964,6 +981,20 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             returnHome(mob, golem);
             return;
         }
+
+        // One profession: a Fornalheiro only carries allowed fuel to the
+        // bottom slot of nearby furnaces/alto-fornos/defumadores.
+        if (!carrying && isFurnaceTender(mob)) {
+            FuelTrip trip = findFuelTrip(level, (CopperGolem) mob);
+            if (trip != null) {
+                fuelTrip = trip;
+                fuelTripStartTick = gameTime;
+                switchState(mob, TaskState.WALK_TO_FUEL_SOURCE, trip.supply(), gameTime);
+            }
+            return;
+        }
+        // Carrying fuel left over from an interrupted job is stored using
+        // the ORIGINAL filtered-chest route below, not deleted or duplicated.
 
         // Periodic compost service must not be starved by a constant stream
         // of crop drops. Reserve one short service window every few seconds;
@@ -1322,6 +1353,187 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         return FarmerStorageProximity.elevated(dx, height, dz);
     }
 
+    private boolean isCollector(PathfinderMob mob) {
+        if (!(mob instanceof CopperGolem golem)) return false;
+        return GolemProfession.fromName(golem.getCustomName() == null
+                ? null : golem.getCustomName().getString()) == GolemProfession.COLETOR;
+    }
+
+    private boolean isFurnaceTender(PathfinderMob mob) {
+        if (!(mob instanceof CopperGolem golem)) return false;
+        return GolemProfession.fromName(golem.getCustomName() == null
+                ? null : golem.getCustomName().getString()) == GolemProfession.FORNALHEIRO;
+    }
+
+    /**
+     * Read candidate FURNACES only in loaded chunks inside a limited local
+     * work radius. The source is always a properly framed storage container;
+     * the Furnace tender never crafts charcoal or consumes wood.
+     */
+    private FuelTrip findFuelTrip(ServerLevel level, CopperGolem golem) {
+        BlockPos center = golem.blockPosition();
+        FuelTrip closest = null;
+        double closestScore = Double.MAX_VALUE;
+        for (BlockPos pos : BlockPos.betweenClosed(
+                center.offset(-12, -3, -12), center.offset(12, 3, 12))) {
+            if (!ServerWorkZoneSettings.contains(golem, level, pos)
+                    || level.getChunkSource().getChunkNow(Math.floorDiv(pos.getX(),16),
+                            Math.floorDiv(pos.getZ(),16)) == null) continue;
+            if (!(level.getBlockEntity(pos) instanceof AbstractFurnaceBlockEntity furnace)) continue;
+            ItemStack present = furnace.getItem(1);
+            if (!present.isEmpty() && !FurnaceSupplyPolicy.allowedFuel(present)) continue;
+            if (!isFarmerNearStorage(golem, pos) &&
+                    getPathCost(golem, pos) == Double.MAX_VALUE) continue;
+
+            for (ItemStack fuel : new ItemStack[]{
+                    new ItemStack(Items.COAL),
+                    new ItemStack(Items.CHARCOAL),
+                    new ItemStack(Items.COAL_BLOCK)}) {
+                if (!present.isEmpty()
+                        && !ItemStack.isSameItemSameComponents(present, fuel)) continue;
+                int target = FurnaceSupplyPolicy.targetCount(fuel);
+                if (FurnaceSupplyPolicy.requiredCount(present.getCount(), target, 1) <= 0)
+                    continue;
+                for (BlockPos source : StorageFrameIndex.destinations(level, fuel)) {
+                    if (!ServerWorkZoneSettings.contains(golem, level, source)
+                            || ItemFrameHelper.hasSourceMarker(level, source)
+                            || source.equals(pos)) continue;
+                    BaseContainerBlockEntity block = getDestinationBlockEntity(level, source);
+                    if (block == null || isChestBusy(block)) continue;
+                    FrameFilterResult filter = getFrameFilterResult(level, source, fuel);
+                    if (!GolemRoutingRules.accepts(filter.hasFrame(),filter.matchesHeld(),false))
+                        continue;
+                    if (golem.blockPosition().distSqr(source) <= 24*24
+                            && getPathCost(golem, source) == Double.MAX_VALUE) continue;
+                    Container inv = getActualContainer(level, source, block);
+                    for (int i=0; i<inv.getContainerSize(); i++) {
+                        ItemStack stocked = inv.getItem(i);
+                        if (!FurnaceSupplyPolicy.allowedFuel(stocked)
+                                || !ItemStack.isSameItemSameComponents(stocked, fuel)) continue;
+                        int available = stocked.getCount() - FurnaceSupplyPolicy.MIN_SOURCE_RESERVE;
+                        int amount = Math.min(ServerCarrySettings.maximum(),
+                                FurnaceSupplyPolicy.requiredCount(present.getCount(),target,available));
+                        if (amount <= 0) continue;
+                        double score = center.distSqr(pos) + center.distSqr(source) * 0.35;
+                        if (score < closestScore) {
+                            closest = new FuelTrip(pos.immutable(),source.immutable(),fuel.copy(),i,amount);
+                            closestScore = score;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        return closest;
+    }
+
+    private void abandonFuelTrip(PathfinderMob mob, long time) {
+        fuelTrip = null;
+        switchState(mob, TaskState.IDLE, null, time);
+        nextSearchTick = time + 20L;
+        // A held stack remains in the golem's main hand and can go back to a
+        // filtered coal/charcoal chest through the normal storage route.
+    }
+
+    private void visitFuelSource(ServerLevel level, PathfinderMob mob, long time) {
+        FuelTrip trip = fuelTrip;
+        if (!(mob instanceof CopperGolem golem) || !isFurnaceTender(mob)
+                || trip == null || !mob.getMainHandItem().isEmpty()
+                || time - fuelTripStartTick > FUEL_TRIP_TIMEOUT_TICKS
+                || !ServerWorkZoneSettings.contains(golem,level,trip.supply())
+                || !ServerWorkZoneSettings.contains(golem,level,trip.furnace())
+                || level.getChunkSource().getChunkNow(
+                        Math.floorDiv(trip.supply().getX(),16),
+                        Math.floorDiv(trip.supply().getZ(),16)) == null) {
+            abandonFuelTrip(mob,time);
+            return;
+        }
+        if (!isFarmerNearStorage(mob,trip.supply())) {
+            if (currentWalkTarget == null || time % 40L == 0L)
+                currentWalkTarget = findBestWalkTargetForChest(mob,trip.supply());
+            walkToTarget(mob,time);
+            return;
+        }
+
+        BaseContainerBlockEntity block = getDestinationBlockEntity(level,trip.supply());
+        if (block == null || isChestBusy(block)
+                || tryLockChest(level.dimension(),trip.supply(),time)) return;
+        try {
+            if (ItemFrameHelper.hasSourceMarker(level,trip.supply())) return;
+            FrameFilterResult filter = getFrameFilterResult(level,trip.supply(),trip.fuel());
+            if (!GolemRoutingRules.accepts(filter.hasFrame(),filter.matchesHeld(),false)) return;
+            Container inv = getActualContainer(level,trip.supply(),block);
+            if (trip.sourceSlot() >= inv.getContainerSize()) return;
+            ItemStack available = inv.getItem(trip.sourceSlot());
+            if (!ItemStack.isSameItemSameComponents(available,trip.fuel())
+                    || available.getCount() - FurnaceSupplyPolicy.MIN_SOURCE_RESERVE < trip.count())
+                return;
+            if (!(level.getBlockEntity(trip.furnace()) instanceof AbstractFurnaceBlockEntity furnace))
+                return;
+            ItemStack already = furnace.getItem(1);
+            if (!already.isEmpty()
+                    && !ItemStack.isSameItemSameComponents(already,trip.fuel())) return;
+            if (already.getCount() >= FurnaceSupplyPolicy.targetCount(trip.fuel())) return;
+            ItemStack taken = available.copyWithCount(trip.count());
+            available.shrink(trip.count());
+            inv.setChanged();
+            block.setChanged();
+            level.blockEntityChanged(trip.supply());
+            mob.setItemInHand(InteractionHand.MAIN_HAND,taken);
+            golem.swing(InteractionHand.MAIN_HAND);
+        } finally {
+            unlockChest();
+        }
+        switchState(mob,TaskState.WALK_TO_FURNACE,trip.furnace(),time);
+        fuelTripStartTick = time;
+    }
+
+    private void refillFurnace(ServerLevel level, PathfinderMob mob, long time) {
+        FuelTrip trip = fuelTrip;
+        if (!(mob instanceof CopperGolem golem) || !isFurnaceTender(mob)
+                || trip == null || mob.getMainHandItem().isEmpty()
+                || time - fuelTripStartTick > FUEL_TRIP_TIMEOUT_TICKS
+                || !ServerWorkZoneSettings.contains(golem,level,trip.furnace())
+                || level.getChunkSource().getChunkNow(
+                        Math.floorDiv(trip.furnace().getX(),16),
+                        Math.floorDiv(trip.furnace().getZ(),16)) == null) {
+            abandonFuelTrip(mob,time);
+            return;
+        }
+        if (!(level.getBlockEntity(trip.furnace()) instanceof AbstractFurnaceBlockEntity furnace)) {
+            abandonFuelTrip(mob,time);
+            return;
+        }
+        if (!isFarmerNearStorage(mob,trip.furnace())) {
+            if (currentWalkTarget == null || time % 40L == 0L)
+                currentWalkTarget = findBestWalkTargetForChest(mob,trip.furnace());
+            walkToTarget(mob,time);
+            return;
+        }
+
+        ItemStack held = mob.getMainHandItem();
+        ItemStack present = furnace.getItem(1);
+        if (FurnaceSupplyPolicy.allowedFuel(held)
+                && (present.isEmpty() || ItemStack.isSameItemSameComponents(present,held))) {
+            int space = Math.max(0, FurnaceSupplyPolicy.targetCount(held) - present.getCount());
+            int qty = Math.min(space,held.getCount());
+            if (qty > 0) {
+                if (present.isEmpty()) furnace.setItem(1,held.copyWithCount(qty));
+                else {
+                    present.grow(qty);
+                    furnace.setChanged();
+                }
+                held.shrink(qty);
+                mob.setItemInHand(InteractionHand.MAIN_HAND,
+                        held.isEmpty() ? ItemStack.EMPTY : held);
+                furnace.setChanged();
+                level.blockEntityChanged(trip.furnace());
+                golem.swing(InteractionHand.MAIN_HAND);
+            }
+        }
+        abandonFuelTrip(mob,time);
+    }
+
     private boolean isFarmer(PathfinderMob mob) {
         if (!(mob instanceof CopperGolem golem)) return false;
         return GolemProfession.fromName(
@@ -1405,6 +1617,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 || !ServerWorkZoneSettings.contains(golem, level, item.blockPosition())) return false;
         ItemStack sample = item.getItem();
         if (isFarmer(mob) && !FarmerHarvestDrops.allowed(sample)) return false;
+        if (isCollector(mob) && !ServerCollectorSettings.accepts(
+                golem.getUUID(), BuiltInRegistries.ITEM.getKey(sample.getItem()).toString()))
+            return false;
         for (BlockPos pos : StorageFrameIndex.destinations(level, sample)) {
             if (!ServerWorkZoneSettings.contains(golem, level, pos)
                     || ItemFrameHelper.hasSourceMarker(level, pos)) continue;

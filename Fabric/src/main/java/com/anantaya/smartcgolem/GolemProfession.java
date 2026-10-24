@@ -17,7 +17,8 @@ import java.util.Locale;
 public enum GolemProfession {
     ORGANIZADOR,
     COLETOR,
-    AGRICULTOR;
+    AGRICULTOR,
+    FORNALHEIRO;
 
     /** Both professions collect loose items. Ordinary organizers do not. */
     public boolean collectsGroundDrops() {
@@ -35,6 +36,7 @@ public enum GolemProfession {
         return switch (label) {
             case "coletor", "collector" -> COLETOR;
             case "agricultor", "farmer" -> AGRICULTOR;
+            case "fornalheiro", "furnace", "furnace tender" -> FORNALHEIRO;
             default -> ORGANIZADOR;
         };
     }

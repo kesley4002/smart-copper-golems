@@ -1,0 +1,36 @@
+package com.anantaya.smartcgolem.ai;
+
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+
+/**
+ * Fuel-only rule for the Fornalheiro. It NEVER processes wooden items,
+ * makes charcoal, or handles ingredient/output slots.
+ */
+public final class FurnaceSupplyPolicy {
+    private FurnaceSupplyPolicy() {}
+    public static final int TARGET_COAL = 8;
+    public static final int TARGET_COAL_BLOCK = 1;
+    public static final int MIN_SOURCE_RESERVE = 1;
+
+    public static boolean allowedFuel(ItemStack item) {
+        return !item.isEmpty() && (item.is(Items.COAL)
+                || item.is(Items.CHARCOAL) || item.is(Items.COAL_BLOCK));
+    }
+
+    public static int targetCount(ItemStack item) {
+        return !item.isEmpty() && item.is(Items.COAL_BLOCK)
+                ? TARGET_COAL_BLOCK : TARGET_COAL;
+    }
+
+    /**
+     * Pure rules for tests and predictable refills.
+     * A furnace with 4 or fewer coals is topped up to 8;
+     * one coal block is enough and is never mixed with other fuel types.
+     */
+    public static int requiredCount(int alreadyPresent, int target, int availableAfterReserve) {
+        if (alreadyPresent < 0 || target < 1 || availableAfterReserve <= 0) return 0;
+        if (alreadyPresent > target / 2) return 0;
+        return Math.max(0, Math.min(target - alreadyPresent, availableAfterReserve));
+    }
+}
