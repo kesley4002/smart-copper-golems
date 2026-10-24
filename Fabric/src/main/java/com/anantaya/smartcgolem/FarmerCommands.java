@@ -1,0 +1,64 @@
+package com.anantaya.smartcgolem;
+
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
+import java.io.IOException;
+
+/** Subcommands of the existing OP-only /scg command tree. */
+public final class FarmerCommands {
+    private FarmerCommands() {}
+
+    public static LiteralArgumentBuilder<CommandSourceStack> node() {
+        return Commands.literal("farmer")
+                .executes(ctx -> status(ctx.getSource()))
+                .then(Commands.literal("compost")
+                        .executes(ctx -> status(ctx.getSource()))
+                        .then(Commands.literal("on")
+                                .executes(ctx -> compost(ctx.getSource(), true)))
+                        .then(Commands.literal("off")
+                                .executes(ctx -> compost(ctx.getSource(), false))))
+                .then(Commands.literal("reserve")
+                        .executes(ctx -> status(ctx.getSource()))
+                        .then(Commands.argument("count", IntegerArgumentType.integer(0, 256))
+                                .executes(ctx -> reserve(ctx.getSource(),
+                                        IntegerArgumentType.getInteger(ctx, "count")))));
+    }
+
+    private static int status(CommandSourceStack src) {
+        src.sendSuccess(() -> Component.literal("Agricultor: composteira "
+                + (ServerFarmerSettings.compostEnabled() ? "LIGADA" : "DESLIGADA")
+                + "; reserva mínima por item e recipiente: "
+                + ServerFarmerSettings.reserve()
+                + ". Apenas baús/barris marcados com composteira a 90 graus."), false);
+        return 1;
+    }
+
+    private static int compost(CommandSourceStack src, boolean enabled) {
+        try {
+            ServerFarmerSettings.changeCompost(enabled);
+            src.sendSuccess(() -> Component.literal(enabled
+                    ? "Compostagem ativada para Agricultores nas estações marcadas."
+                    : "Compostagem desativada."), true);
+            return 1;
+        } catch (IOException e) {
+            src.sendFailure(Component.literal("Falha ao salvar compostagem: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int reserve(CommandSourceStack src, int count) {
+        try {
+            ServerFarmerSettings.changeReserve(count);
+            src.sendSuccess(() -> Component.literal(
+                    "Reserva mínima para compostagem: " + count
+                    + " de cada item elegível, por recipiente."), true);
+            return 1;
+        } catch (IOException e) {
+            src.sendFailure(Component.literal("Falha ao salvar reserva: " + e.getMessage()));
+            return 0;
+        }
+    }
+}

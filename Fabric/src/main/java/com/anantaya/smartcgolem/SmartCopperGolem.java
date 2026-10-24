@@ -32,6 +32,7 @@ public class SmartCopperGolem implements ModInitializer {
             ServerWorkZoneSettings.load(server);
             ServerCategorySettings.load(server);
             ServerCarrySettings.load(server);
+            ServerFarmerSettings.load(server);
             StorageFrameIndex.clear();
         });
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
@@ -39,6 +40,7 @@ public class SmartCopperGolem implements ModInitializer {
             ServerWorkZoneSettings.reset();
             ServerCategorySettings.unload();
             ServerCarrySettings.unload();
+            ServerFarmerSettings.unload();
             StorageFrameIndex.clear();
         });
 
@@ -57,6 +59,7 @@ public class SmartCopperGolem implements ModInitializer {
                     .then(languageNode())
                     .then(GolemWorkCommands.namedNode())
                     .then(GolemWorkCommands.nightNode())
+                    .then(FarmerCommands.node())
                     .then(FrameRotationCommands.node())
                     .then(CustomCategoryCommands.node())
                     .then(Commands.literal("carry")
