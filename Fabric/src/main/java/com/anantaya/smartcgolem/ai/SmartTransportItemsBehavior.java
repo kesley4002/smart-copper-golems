@@ -1034,7 +1034,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (distance >= bestDistance) continue;
             // Avoid choosing an isolated item behind an inaccessible barrier.
             Path path = mob.getNavigation().createPath(item.blockPosition(), 1);
-            if (path == null || !path.canReach()) continue;
+            if (path == null || !path.canReach()) {
+                // Fresh crop drops often land inside a replanted crop block.
+                // If the Farmer is already standing beside the drop, no path
+                // computation is needed to reach it. Do not relax Collector AI.
+                if (!isFarmer(mob) || distance > 2.25D) continue;
+            }
             best = item;
             bestDistance = distance;
         }
