@@ -48,6 +48,18 @@ public class GolemProfessionTest {
     }
 
     @Test
+    public void shepherdHasItsOwnPortugueseAndEnglishProfession() {
+        assertEquals(GolemProfession.PASTOR, GolemProfession.fromName("Pastor: Lúcia"));
+        assertEquals(GolemProfession.PASTOR, GolemProfession.fromName("Pastor de Ovelhas: Ana"));
+        assertEquals(GolemProfession.PASTOR, GolemProfession.fromName("Tosquiador: Pedro"));
+        assertEquals(GolemProfession.PASTOR, GolemProfession.fromName("Shepherd: Alex"));
+        assertEquals(GolemProfession.PASTOR, GolemProfession.fromName("Shearer: Kate"));
+        assertTrue(GolemProfession.PASTOR.collectsGroundDrops());
+        assertFalse(GolemProfession.FORNALHEIRO.collectsGroundDrops());
+        assertEquals(GolemProfession.ORGANIZADOR, GolemProfession.fromName("Lúcia"));
+    }
+
+    @Test
     public void unconfiguredGolemsKeepLegacySorting() {
         assertEquals(GolemProfession.ORGANIZADOR, GolemProfession.fromName(null));
         assertEquals(GolemProfession.ORGANIZADOR, GolemProfession.fromName(""));
