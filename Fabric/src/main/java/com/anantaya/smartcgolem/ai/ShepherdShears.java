@@ -29,7 +29,12 @@ public final class ShepherdShears {
     public static boolean isVirtual(ItemStack stack) {
         if (stack.isEmpty() || !stack.is(Items.SHEARS)) return false;
         Component name = stack.get(DataComponents.CUSTOM_NAME);
-        return name != null && MARKER.equals(name.getString());
+        return name != null && isVisualMarker(name.getString());
+    }
+
+    /** Pure check to prevent treating player-renamed real shears as cosmetic. */
+    public static boolean isVisualMarker(String name) {
+        return MARKER.equals(name);
     }
 
     /** A cosmetic tool does not count as cargo and never enters a chest. */
