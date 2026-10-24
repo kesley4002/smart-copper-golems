@@ -3,7 +3,7 @@ package com.anantaya.smartcgolem.ai;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.core.registries.BuiltInRegistries;
 
 /**
@@ -35,22 +35,22 @@ public final class ShepherdWool {
 
     public static Item woolFor(DyeColor color) {
         return switch (color) {
-            case WHITE -> Items.WHITE_WOOL;
-            case ORANGE -> Items.ORANGE_WOOL;
-            case MAGENTA -> Items.MAGENTA_WOOL;
-            case LIGHT_BLUE -> Items.LIGHT_BLUE_WOOL;
-            case YELLOW -> Items.YELLOW_WOOL;
-            case LIME -> Items.LIME_WOOL;
-            case PINK -> Items.PINK_WOOL;
-            case GRAY -> Items.GRAY_WOOL;
-            case LIGHT_GRAY -> Items.LIGHT_GRAY_WOOL;
-            case CYAN -> Items.CYAN_WOOL;
-            case PURPLE -> Items.PURPLE_WOOL;
-            case BLUE -> Items.BLUE_WOOL;
-            case BROWN -> Items.BROWN_WOOL;
-            case GREEN -> Items.GREEN_WOOL;
-            case RED -> Items.RED_WOOL;
-            case BLACK -> Items.BLACK_WOOL;
+            case WHITE -> Blocks.WHITE_WOOL.asItem();
+            case ORANGE -> Blocks.ORANGE_WOOL.asItem();
+            case MAGENTA -> Blocks.MAGENTA_WOOL.asItem();
+            case LIGHT_BLUE -> Blocks.LIGHT_BLUE_WOOL.asItem();
+            case YELLOW -> Blocks.YELLOW_WOOL.asItem();
+            case LIME -> Blocks.LIME_WOOL.asItem();
+            case PINK -> Blocks.PINK_WOOL.asItem();
+            case GRAY -> Blocks.GRAY_WOOL.asItem();
+            case LIGHT_GRAY -> Blocks.LIGHT_GRAY_WOOL.asItem();
+            case CYAN -> Blocks.CYAN_WOOL.asItem();
+            case PURPLE -> Blocks.PURPLE_WOOL.asItem();
+            case BLUE -> Blocks.BLUE_WOOL.asItem();
+            case BROWN -> Blocks.BROWN_WOOL.asItem();
+            case GREEN -> Blocks.GREEN_WOOL.asItem();
+            case RED -> Blocks.RED_WOOL.asItem();
+            case BLACK -> Blocks.BLACK_WOOL.asItem();
         };
     }
 }
