@@ -36,7 +36,7 @@ public enum GolemProfession {
         return switch (label) {
             case "coletor", "collector" -> COLETOR;
             case "agricultor", "farmer" -> AGRICULTOR;
-            case "fornalheiro", "furnace", "furnace tender" -> FORNALHEIRO;
+            case "fornalheiro", "furnace", "furnace tender", "furnace keeper", "furnace operator" -> FORNALHEIRO;
             default -> ORGANIZADOR;
         };
     }

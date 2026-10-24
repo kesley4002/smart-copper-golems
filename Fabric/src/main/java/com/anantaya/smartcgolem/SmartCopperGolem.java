@@ -34,6 +34,7 @@ public class SmartCopperGolem implements ModInitializer {
             ServerCarrySettings.load(server);
             ServerFarmerSettings.load(server);
             ServerCollectorSettings.load(server);
+            ServerFurnaceSettings.load(server);
             StorageFrameIndex.clear();
         });
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
@@ -43,6 +44,7 @@ public class SmartCopperGolem implements ModInitializer {
             ServerCarrySettings.unload();
             ServerFarmerSettings.unload();
             ServerCollectorSettings.unload();
+            ServerFurnaceSettings.unload();
             StorageFrameIndex.clear();
         });
 
@@ -62,7 +64,10 @@ public class SmartCopperGolem implements ModInitializer {
                     .then(GolemWorkCommands.namedNode())
                     .then(GolemWorkCommands.nightNode())
                     .then(FarmerCommands.node())
+                    .then(FarmerCommands.nodePortuguese())
                     .then(CollectorCommands.node())
+                    .then(FurnaceCommands.node())
+                    .then(FurnaceCommands.nodePortuguese())
                     .then(FrameRotationCommands.node())
                     .then(CustomCategoryCommands.node())
                     .then(Commands.literal("carry")
@@ -76,6 +81,11 @@ public class SmartCopperGolem implements ModInitializer {
                             .executes(ctx -> changeRadius(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "width"))))));
             dispatcher.register(GolemWorkCommands.aliasNode());
             dispatcher.register(CollectorCommands.aliasNode());
+            dispatcher.register(CollectorCommands.aliasNodeEnglish());
+            dispatcher.register(FarmerCommands.aliasNodeEnglish());
+            dispatcher.register(FarmerCommands.aliasNodePortuguese());
+            dispatcher.register(FurnaceCommands.aliasEnglish());
+            dispatcher.register(FurnaceCommands.aliasPortuguese());
             dispatcher.register(Commands.literal("set")
                     .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_MODERATOR))
                     .then(Commands.literal("itemframes")

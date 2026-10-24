@@ -33,6 +33,21 @@ public class GolemProfessionTest {
     }
 
     @Test
+    public void portugueseAndEnglishNameTagsSelectTheSameProfessions() {
+        assertEquals(GolemProfession.COLETOR, GolemProfession.fromName("Coletor: Pedro"));
+        assertEquals(GolemProfession.COLETOR, GolemProfession.fromName("Collector: Peter"));
+        assertEquals(GolemProfession.AGRICULTOR, GolemProfession.fromName("Agricultor: João"));
+        assertEquals(GolemProfession.AGRICULTOR, GolemProfession.fromName("Farmer: John"));
+        assertEquals(GolemProfession.FORNALHEIRO,
+                GolemProfession.fromName("Fornalheiro: Carlos"));
+        assertEquals(GolemProfession.FORNALHEIRO,
+                GolemProfession.fromName("Furnace Tender: Charles"));
+        assertEquals(GolemProfession.FORNALHEIRO,
+                GolemProfession.fromName("Furnace Keeper: Charles"));
+        assertEquals(GolemProfession.ORGANIZADOR, GolemProfession.fromName("Peter"));
+    }
+
+    @Test
     public void unconfiguredGolemsKeepLegacySorting() {
         assertEquals(GolemProfession.ORGANIZADOR, GolemProfession.fromName(null));
         assertEquals(GolemProfession.ORGANIZADOR, GolemProfession.fromName(""));
