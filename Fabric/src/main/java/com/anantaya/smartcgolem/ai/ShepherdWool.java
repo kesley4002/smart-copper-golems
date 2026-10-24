@@ -3,7 +3,7 @@ package com.anantaya.smartcgolem.ai;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.item.Items;
 import net.minecraft.core.registries.BuiltInRegistries;
 
 /**
@@ -33,24 +33,24 @@ public final class ShepherdWool {
         };
     }
 
+    /**
+     * Minecraft 26.2 no longer exposes each color as a Blocks/Items constant
+     * in these mappings. Resolve the actual registered item ID instead.
+     */
+    private static final java.util.Map<DyeColor, Item> WOOL_BY_COLOR =
+            new java.util.EnumMap<>(DyeColor.class);
+
     public static Item woolFor(DyeColor color) {
-        return switch (color) {
-            case WHITE -> Blocks.WHITE_WOOL.asItem();
-            case ORANGE -> Blocks.ORANGE_WOOL.asItem();
-            case MAGENTA -> Blocks.MAGENTA_WOOL.asItem();
-            case LIGHT_BLUE -> Blocks.LIGHT_BLUE_WOOL.asItem();
-            case YELLOW -> Blocks.YELLOW_WOOL.asItem();
-            case LIME -> Blocks.LIME_WOOL.asItem();
-            case PINK -> Blocks.PINK_WOOL.asItem();
-            case GRAY -> Blocks.GRAY_WOOL.asItem();
-            case LIGHT_GRAY -> Blocks.LIGHT_GRAY_WOOL.asItem();
-            case CYAN -> Blocks.CYAN_WOOL.asItem();
-            case PURPLE -> Blocks.PURPLE_WOOL.asItem();
-            case BLUE -> Blocks.BLUE_WOOL.asItem();
-            case BROWN -> Blocks.BROWN_WOOL.asItem();
-            case GREEN -> Blocks.GREEN_WOOL.asItem();
-            case RED -> Blocks.RED_WOOL.asItem();
-            case BLACK -> Blocks.BLACK_WOOL.asItem();
-        };
+        Item cached = WOOL_BY_COLOR.get(color);
+        if (cached != null) return cached;
+        String id = "minecraft:" + color.name().toLowerCase(java.util.Locale.ROOT) + "_wool";
+        for (Item item : BuiltInRegistries.ITEM) {
+            if (BuiltInRegistries.ITEM.getKey(item).toString().equals(id)) {
+                WOOL_BY_COLOR.put(color, item);
+                return item;
+            }
+        }
+        // Fail closed: no registered wool means we must not shear an animal.
+        return Items.AIR;
     }
 }
