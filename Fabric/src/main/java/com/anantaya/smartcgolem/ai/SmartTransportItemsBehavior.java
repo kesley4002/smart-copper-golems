@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableMap;
 import com.anantaya.smartcgolem.util.SearchVolume;
 import com.anantaya.smartcgolem.ServerWorkZoneSettings;
 import com.anantaya.smartcgolem.GolemProfession;
+import com.anantaya.smartcgolem.ServerFarmerSettings;
 import com.anantaya.smartcgolem.util.ItemFrameHelper;
 import com.anantaya.smartcgolem.util.StorageFrameIndex;
 import com.anantaya.smartcgolem.util.GolemRoutingRules;
@@ -38,6 +39,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.ComposterBlock;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.core.particles.ParticleTypes;
 import org.jspecify.annotations.NonNull;
@@ -74,6 +77,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         WALK_TO_SOURCE,
         WALK_TO_ITEM,
         WALK_TO_CROP,
+        WALK_TO_COMPOSTER,
         WAIT_FOR_SOURCE,
         INTERACT_SOURCE,
         WALK_TO_DESTINATION,
@@ -124,6 +128,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private ItemEntity targetGroundItem = null;
     private long groundItemSearchStartTick = 0L;
     private long cropRouteStartTick = 0L;
+    private long compostRouteStartTick = 0L;
+    private long nextCompostProbeTick = 0L;
+    private static final long COMPOST_PROBE_INTERVAL = 80L;
     private static final int CROP_ROUTE_TIMEOUT_TICKS = 240;
     private static final int GROUND_COLLECT_HORIZONTAL = 16;
     private static final int GROUND_COLLECT_VERTICAL = 5;
@@ -151,6 +158,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     private static final int ARRIVAL_DISTANCE_SQUARED = 4;
     // Wider work zones are scanned only once every 5 seconds per golem.
     private static final int SEARCH_COOLDOWN_TICKS = 100;
+    // The farmer should not idle for five seconds between nearby harvests.
+    // Do not increase organizer/collector wide-storage scanning frequency.
+    private static final int FARMER_SEARCH_COOLDOWN_TICKS = 20;
 
     public SmartTransportItemsBehavior(
             float speedModifier,
@@ -342,6 +352,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             case WALK_TO_ITEM -> collectGroundItem(level, mob, gameTime);
 
             case WALK_TO_CROP -> walkToCrop(level, mob, gameTime);
+
+            case WALK_TO_COMPOSTER -> workAtComposter(level, mob, gameTime);
 
             case WALK_TO_SOURCE -> {
                 walkToTarget(mob, gameTime);
@@ -917,7 +929,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             return;
         }
 
-        nextSearchTick = gameTime + SEARCH_COOLDOWN_TICKS;
+        nextSearchTick = gameTime
+                + (isFarmer(mob) ? FARMER_SEARCH_COOLDOWN_TICKS : SEARCH_COOLDOWN_TICKS);
 
         boolean carrying = !mob.getMainHandItem().isEmpty();
         if (!carrying && mob instanceof CopperGolem golem
@@ -949,6 +962,17 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     currentWalkTarget = crop;
                     cropRouteStartTick = gameTime;
                     taskState = TaskState.WALK_TO_CROP;
+                    return;
+                }
+                if (ServerFarmerSettings.compostEnabled() && gameTime >= nextCompostProbeTick) {
+                    nextCompostProbeTick = gameTime + COMPOST_PROBE_INTERVAL;
+                    BlockPos composter = findServiceableComposter(level, (CopperGolem) mob);
+                    if (composter != null) {
+                        currentTarget = composter;
+                        currentWalkTarget = findBestWalkTargetForChest(mob, composter);
+                        compostRouteStartTick = gameTime;
+                        taskState = TaskState.WALK_TO_COMPOSTER;
+                    }
                 }
             }
             return;
@@ -972,6 +996,152 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             System.out.println("[SMART-GOLEM SOURCE] Selected source chest=" + best);
             switchState(mob, TaskState.WALK_TO_SOURCE, best, gameTime);
         }
+    }
+
+    /** Nearby composter workstation; deliberately no chunk loading. */
+    private BlockPos findServiceableComposter(ServerLevel level, CopperGolem golem) {
+        BlockPos origin = golem.blockPosition();
+        BlockPos best = null;
+        double distanceBest = Double.MAX_VALUE;
+        for (BlockPos p : BlockPos.betweenClosed(
+                origin.offset(-12, -2, -12), origin.offset(12, 2, 12))) {
+            if (level.getChunkSource().getChunkNow(Math.floorDiv(p.getX(), 16),
+                    Math.floorDiv(p.getZ(), 16)) == null
+                    || !ServerWorkZoneSettings.contains(golem, level, p)) continue;
+            BlockState block = level.getBlockState(p);
+            if (!block.is(Blocks.COMPOSTER)) continue;
+            int levelNumber = block.getValue(ComposterBlock.LEVEL);
+            boolean work = levelNumber == ComposterBlock.READY
+                    ? hasBoneMealDestination(level, golem)
+                    : (levelNumber < ComposterBlock.MAX_LEVEL
+                        && findCompostInput(level, golem, p) != null);
+            if (!work) continue;
+            double dist = p.distSqr(origin);
+            if (dist >= distanceBest) continue;
+            if (golem.blockPosition().distSqr(p) > 9) {
+                Path path = golem.getNavigation().createPath(p, 1);
+                if (path == null || !path.canReach()) continue;
+            }
+            best = p.immutable();
+            distanceBest = dist;
+        }
+        return best;
+    }
+
+    private record CompostInput(BlockPos containerPos, int slot) {}
+
+    /**
+     * Only an explicitly marked chest/barrel within two blocks of the
+     * composter can donate surplus. In particular, unrelated storage
+     * containers never become compost fuel.
+     */
+    private CompostInput findCompostInput(ServerLevel level, CopperGolem golem,
+                                         BlockPos composter) {
+        int reserve = ServerFarmerSettings.reserve();
+        for (BlockPos p : BlockPos.betweenClosed(
+                composter.offset(-2, -1, -2), composter.offset(2, 1, 2))) {
+            if (level.getChunkSource().getChunkNow(Math.floorDiv(p.getX(), 16),
+                    Math.floorDiv(p.getZ(), 16)) == null
+                    || !ServerWorkZoneSettings.contains(golem, level, p)) continue;
+            if (!ItemFrameHelper.hasCompostSourceMarker(level, p)) continue;
+            BaseContainerBlockEntity block = getDestinationBlockEntity(level, p);
+            if (block == null) continue;
+            Container container = getActualContainer(level, p, block);
+            for (int slot = 0; slot < container.getContainerSize(); slot++) {
+                ItemStack stack = container.getItem(slot);
+                if (FarmerCompostPolicy.eligible(stack)
+                        && FarmerCompostPolicy.canConsumeOne(
+                                FarmerCompostPolicy.totalIn(container, stack), reserve))
+                    return new CompostInput(p.immutable(), slot);
+            }
+        }
+        return null;
+    }
+
+    private boolean hasBoneMealDestination(ServerLevel level, CopperGolem golem) {
+        ItemStack boneMeal = new ItemStack(Items.BONE_MEAL);
+        for (BlockPos p : StorageFrameIndex.destinations(level, boneMeal)) {
+            if (!ServerWorkZoneSettings.contains(golem, level, p)
+                    || ItemFrameHelper.hasSourceMarker(level, p)) continue;
+            BaseContainerBlockEntity block = getDestinationBlockEntity(level, p);
+            if (block == null) continue;
+            ItemFrameHelper.FilterResult filter = ItemFrameHelper.filter(level, p, boneMeal);
+            if (filter.hasFrame() && filter.matchesHeld()
+                    && !hasSpaceFor(getActualContainer(level, p, block), boneMeal)) return true;
+        }
+        return false;
+    }
+
+    private void workAtComposter(ServerLevel level, PathfinderMob mob, long time) {
+        BlockPos station = currentTarget;
+        if (!(mob instanceof CopperGolem golem) || !isFarmer(mob)
+                || !ServerFarmerSettings.compostEnabled() || station == null
+                || !mob.getMainHandItem().isEmpty()
+                || !ServerWorkZoneSettings.contains(golem, level, station)
+                || time - compostRouteStartTick >= 240L
+                || level.getChunkSource().getChunkNow(Math.floorDiv(station.getX(), 16),
+                        Math.floorDiv(station.getZ(), 16)) == null
+                || !level.getBlockState(station).is(Blocks.COMPOSTER)) {
+            switchState(mob, TaskState.IDLE, null, time);
+            return;
+        }
+
+        double dx = mob.getX() - (station.getX() + 0.5D);
+        double dz = mob.getZ() - (station.getZ() + 0.5D);
+        if (dx * dx + dz * dz > 3.24D
+                || Math.abs(mob.getY() - station.getY()) > 1.5D) {
+            currentWalkTarget = findBestWalkTargetForChest(mob, station);
+            walkToTarget(mob, time);
+            return;
+        }
+        mob.getNavigation().stop();
+        BlockState state = level.getBlockState(station);
+        int fill = state.getValue(ComposterBlock.LEVEL);
+        if (fill == ComposterBlock.READY) {
+            // Only extract when a framed bone-meal destination is available.
+            // The vanilla extraction spawns its item entity; the existing
+            // Farmer/Collector pickup and filter pipeline stores it.
+            if (hasBoneMealDestination(level, golem)) {
+                ComposterBlock.extractProduce(golem, state, level, station);
+                golem.swing(InteractionHand.MAIN_HAND);
+                nextSearchTick = time + 1L;
+            }
+        } else if (fill < ComposterBlock.MAX_LEVEL) {
+            CompostInput input = findCompostInput(level, golem, station);
+            if (input != null && !tryLockChest(level.dimension(), input.containerPos(), time)) {
+                try {
+                    BaseContainerBlockEntity chest = getDestinationBlockEntity(level, input.containerPos());
+                    if (chest != null && ItemFrameHelper.hasCompostSourceMarker(level, input.containerPos())) {
+                        Container container = getActualContainer(level, input.containerPos(), chest);
+                        if (input.slot() < container.getContainerSize()) {
+                            ItemStack stored = container.getItem(input.slot());
+                            if (FarmerCompostPolicy.eligible(stored)
+                                    && FarmerCompostPolicy.canConsumeOne(
+                                            FarmerCompostPolicy.totalIn(container, stored),
+                                            ServerFarmerSettings.reserve())) {
+                                // Vanilla decides whether the item advances the
+                                // composter; attempted compost items are consumed,
+                                // even when a random fill attempt fails.
+                                ItemStack one = stored.copyWithCount(1);
+                                ComposterBlock.insertItem(golem, state, level, one, station);
+                                stored.shrink(1);
+                                container.setChanged();
+                                chest.setChanged();
+                                level.blockEntityChanged(input.containerPos());
+                                golem.swing(InteractionHand.MAIN_HAND);
+                            }
+                        }
+                    }
+                } finally {
+                    unlockChest();
+                }
+            }
+        }
+        // One interaction per task. Re-check later instead of spinning
+        // continuously or consuming a chest stack in one game tick.
+        nextSearchTick = time + 12L;
+        nextCompostProbeTick = time + 20L;
+        switchState(mob, TaskState.IDLE, null, time);
     }
 
     private boolean isFarmer(PathfinderMob mob) {
