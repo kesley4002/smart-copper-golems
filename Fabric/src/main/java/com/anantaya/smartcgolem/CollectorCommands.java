@@ -6,7 +6,6 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.permissions.Permissions;
 import net.minecraft.world.entity.Entity;
@@ -101,8 +100,12 @@ public final class CollectorCommands {
         String id = null;
         if (raw != null) {
             id = parseItem(raw);
-            ResourceLocation key = ResourceLocation.tryParse(id);
-            if (key == null || !BuiltInRegistries.ITEM.keySet().contains(key)) {
+            // Minecraft 26.2 renamed ResourceLocation. Validate against the
+            // live item registry by its stable string identifier instead.
+            final String selectedId = id;
+            if (!selectedId.matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
+                    || BuiltInRegistries.ITEM.keySet().stream()
+                            .noneMatch(key -> key.toString().equals(selectedId))) {
                 src.sendFailure(Component.literal("Item não encontrado: " + raw
                         + ". Use por exemplo ovo ou minecraft:egg."));
                 return 0;
