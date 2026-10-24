@@ -33,6 +33,7 @@ public class SmartCopperGolem implements ModInitializer {
             ServerCategorySettings.load(server);
             ServerCarrySettings.load(server);
             ServerFarmerSettings.load(server);
+            ServerCollectorSettings.load(server);
             StorageFrameIndex.clear();
         });
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
@@ -41,6 +42,7 @@ public class SmartCopperGolem implements ModInitializer {
             ServerCategorySettings.unload();
             ServerCarrySettings.unload();
             ServerFarmerSettings.unload();
+            ServerCollectorSettings.unload();
             StorageFrameIndex.clear();
         });
 
@@ -60,6 +62,7 @@ public class SmartCopperGolem implements ModInitializer {
                     .then(GolemWorkCommands.namedNode())
                     .then(GolemWorkCommands.nightNode())
                     .then(FarmerCommands.node())
+                    .then(CollectorCommands.node())
                     .then(FrameRotationCommands.node())
                     .then(CustomCategoryCommands.node())
                     .then(Commands.literal("carry")
@@ -72,6 +75,7 @@ public class SmartCopperGolem implements ModInitializer {
                         .then(Commands.argument("width", IntegerArgumentType.integer(16,1000))
                             .executes(ctx -> changeRadius(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "width"))))));
             dispatcher.register(GolemWorkCommands.aliasNode());
+            dispatcher.register(CollectorCommands.aliasNode());
             dispatcher.register(Commands.literal("set")
                     .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_MODERATOR))
                     .then(Commands.literal("itemframes")
