@@ -213,7 +213,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     @Override
     protected void start(@NonNull ServerLevel level, PathfinderMob mob, long gameTime) {
 
-        boolean carrying = !mob.getMainHandItem().isEmpty();
+        // The virtual scissors on a Pastor's hand are never cargo.
+        boolean carrying = !ShepherdShears.isFreeHand(mob.getMainHandItem());
 
         currentTarget = null;
         currentWalkTarget = null;
@@ -354,6 +355,19 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
     @Override
     protected void tick(@NonNull ServerLevel level, PathfinderMob mob, long gameTime) {
+
+        if (mob instanceof CopperGolem golem) {
+            if (!isShepherd(mob)) {
+                // Removing/renaming this profession removes ONLY the marked
+                // virtual tool, never a genuine pair of shears.
+                ShepherdShears.hideIfVirtual(golem);
+            } else if (mob.getMainHandItem().isEmpty()
+                    && (taskState == TaskState.IDLE || taskState == TaskState.WALK_TO_SHEEP)) {
+                // Render a normal-looking shears model in Java and Bedrock.
+                // A wool stack replaces it the moment the Pastor picks wool up.
+                ShepherdShears.showIfFree(golem);
+            }
+        }
 
         // A newly reduced work area must stop the CURRENT job as well as
         // prevent picking new jobs. Never drop a carried stack.
@@ -989,7 +1003,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 : isFurnaceTender(mob) ? FURNACE_SEARCH_COOLDOWN_TICKS
                 : SEARCH_COOLDOWN_TICKS);
 
-        boolean carrying = !mob.getMainHandItem().isEmpty();
+        boolean carrying = !ShepherdShears.isFreeHand(mob.getMainHandItem());
         if (!carrying && mob instanceof CopperGolem golem
                 && ServerWorkZoneSettings.isNight(level)
                 && !ServerWorkZoneSettings.nightWorkEnabled()) {
@@ -1622,7 +1636,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         Sheep sheep = targetSheep;
         if (!(mob instanceof CopperGolem golem) || !isShepherd(mob)
                 || sheep == null || !sheep.isAlive() || sheep.level() != level
-                || !sheep.readyForShearing() || !mob.getMainHandItem().isEmpty()
+                || !sheep.readyForShearing()
+                || !ShepherdShears.isFreeHand(mob.getMainHandItem())
                 || !ServerWorkZoneSettings.contains(golem, level, sheep.blockPosition())
                 || gameTime - sheepWalkStartTick > SHEEP_PATH_TIMEOUT) {
             targetSheep = null;
@@ -1768,7 +1783,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
     private void collectGroundItem(ServerLevel level, PathfinderMob mob, long gameTime) {
         ItemEntity item = targetGroundItem;
-        if (item == null || !collectsGroundDrops(mob) || !mob.getMainHandItem().isEmpty()
+        if (item == null || !collectsGroundDrops(mob)
+                || !ShepherdShears.isFreeHand(mob.getMainHandItem())
                 || gameTime - groundItemSearchStartTick > GROUND_COLLECT_TIMEOUT_TICKS
                 || !canCollectGroundItem(level, mob, item)) {
             cancelGroundCollection(mob);
