@@ -28,6 +28,11 @@ public final class CollectorCommands {
     public static LiteralArgumentBuilder<CommandSourceStack> node() {
         return root("collector");
     }
+    /** English top-level form: /collector Pedro item egg */
+    public static LiteralArgumentBuilder<CommandSourceStack> aliasNodeEnglish() {
+        return root("collector").requires(src ->
+                src.permissions().hasPermission(Permissions.COMMANDS_MODERATOR));
+    }
     private static LiteralArgumentBuilder<CommandSourceStack> root(String literal) {
         return Commands.literal(literal)
                 .then(Commands.argument("name", StringArgumentType.string())
