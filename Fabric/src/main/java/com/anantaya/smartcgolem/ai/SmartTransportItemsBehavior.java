@@ -1034,10 +1034,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (!work) continue;
             double dist = p.distSqr(origin);
             if (dist >= distanceBest) continue;
-            if (golem.blockPosition().distSqr(p) > 9) {
-                Path path = golem.getNavigation().createPath(p, 1);
-                if (path == null || !path.canReach()) continue;
-            }
+            if (golem.blockPosition().distSqr(p) > 9
+                    && getPathCost(golem, p) == Double.MAX_VALUE) continue;
             best = p.immutable();
             distanceBest = dist;
         }
