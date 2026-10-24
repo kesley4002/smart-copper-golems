@@ -395,7 +395,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     return;
                 }
 
-                if (hasArrived(mob)) {
+                if (hasArrived(mob)
+                        || (isFarmer(mob) && currentTarget != null
+                            && isFarmerNearStorage(mob, currentTarget))) {
                     switchState(mob, TaskState.WAIT_FOR_DESTINATION, currentTarget, gameTime);
                 }
             }
@@ -418,7 +420,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 // Farmer must physically approach the chest; other professions
                 // keep their existing distant transport behavior.
                 if (isFarmer(mob) && !isFarmerNearStorage(mob, currentTarget)) {
-                    startStretchNearElevatedChest(level, mob, gameTime);
+                    if (startStretchNearElevatedChest(level, mob, gameTime)) return;
+                    if (gameTime % 20L == 0L)
+                        currentWalkTarget = findBestWalkTargetForChest(mob, currentTarget);
                     return;
                 }
                 if (isChestLocked(level.dimension(), currentTarget, gameTime) && !isChestBusy(chest)) {
@@ -963,7 +967,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             BlockPos composter = findServiceableComposter(level, (CopperGolem) mob);
             if (composter != null) {
                 currentTarget = composter;
-                currentWalkTarget = findBestWalkTargetForChest(mob, composter);
+                currentWalkTarget = findFarmerComposterApproach(mob, composter);
                 compostRouteStartTick = gameTime;
                 taskState = TaskState.WALK_TO_COMPOSTER;
                 return;
@@ -1013,6 +1017,25 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             System.out.println("[SMART-GOLEM SOURCE] Selected source chest=" + best);
             switchState(mob, TaskState.WALK_TO_SOURCE, best, gameTime);
         }
+    }
+
+    /** Search accessible standing blocks BESIDE the composter, not inside it. */
+    private BlockPos findFarmerComposterApproach(PathfinderMob mob, BlockPos station) {
+        BlockPos best = null;
+        double bestCost = Double.MAX_VALUE;
+        for (BlockPos near : BlockPos.betweenClosed(
+                station.offset(-1, -1, -1), station.offset(1, 1, 1))) {
+            if (near.getX() == station.getX() && near.getZ() == station.getZ()) continue;
+            Path path = mob.getNavigation().createPath(near, 1);
+            if (path == null || !path.canReach()) continue;
+            double cost = path.getNodeCount()
+                    + 0.2D * mob.blockPosition().distSqr(near);
+            if (cost < bestCost) {
+                bestCost = cost;
+                best = near.immutable();
+            }
+        }
+        return best == null ? findBestWalkTargetForChest(mob, station) : best;
     }
 
     /** Nearby composter workstation; deliberately no chunk loading. */
@@ -1094,8 +1117,10 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             BaseContainerBlockEntity block = getDestinationBlockEntity(level, p);
             if (block == null) continue;
             ItemFrameHelper.FilterResult filter = ItemFrameHelper.filter(level, p, boneMeal);
+            // Legacy hasSpaceFor returns FALSE when any inventory space exists.
             if (filter.hasFrame() && filter.matchesHeld()
-                    && !hasSpaceFor(getActualContainer(level, p, block), boneMeal)) return true;
+                    && !hasSpaceFor(getActualContainer(level, p, block), boneMeal)
+                    && farmerCanApproachStorage(golem, p)) return true;
         }
         return false;
     }
@@ -1118,7 +1143,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         double dz = mob.getZ() - (station.getZ() + 0.5D);
         if (dx * dx + dz * dz > 3.24D
                 || Math.abs(mob.getY() - station.getY()) > 1.5D) {
-            currentWalkTarget = findBestWalkTargetForChest(mob, station);
+            if (currentWalkTarget == null || (time - compostRouteStartTick) % 40L == 0L)
+                currentWalkTarget = findFarmerComposterApproach(mob, station);
             walkToTarget(mob, time);
             return;
         }
