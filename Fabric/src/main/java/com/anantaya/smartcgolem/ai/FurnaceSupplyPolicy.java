@@ -18,9 +18,17 @@ public final class FurnaceSupplyPolicy {
                 || item.is(Items.CHARCOAL) || item.is(Items.COAL_BLOCK));
     }
 
+    /** Legacy default, retained for existing callers and tests. */
     public static int targetCount(ItemStack item) {
+        return targetCount(item, TARGET_COAL);
+    }
+
+    /** One coal block smelts 80 items and remains fixed at one unit. */
+    public static int targetCount(ItemStack item, int configuredCoal) {
+        if (!com.anantaya.smartcgolem.ServerFurnaceSettings.validCoalTarget(configuredCoal))
+            throw new IllegalArgumentException("Coal target must be 8..64 in steps of 8.");
         return !item.isEmpty() && item.is(Items.COAL_BLOCK)
-                ? TARGET_COAL_BLOCK : TARGET_COAL;
+                ? TARGET_COAL_BLOCK : configuredCoal;
     }
 
     /**
