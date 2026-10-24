@@ -24,7 +24,9 @@ public final class ServerFurnaceSettings {
     public static final int DEFAULT_COAL = 8;
     private static final String FILE = "smart-copper-golem-furnaces.properties";
     private static final Map<UUID, Integer> PER_GOLEM = new HashMap<>();
+    private static final Map<UUID, Integer> PER_GOLEM_DETECTION = new HashMap<>();
     private static int globalCoal = DEFAULT_COAL;
+    private static int globalDetection = com.anantaya.smartcgolem.ai.FurnaceSearch.DEFAULT_RADIUS;
     private static Path path;
 
     public static boolean validCoalTarget(int target) {
@@ -32,6 +34,11 @@ public final class ServerFurnaceSettings {
     }
 
     public static int globalCoal() { return globalCoal; }
+    public static int globalDetection() { return globalDetection; }
+    public static Integer individualDetection(UUID id) { return PER_GOLEM_DETECTION.get(id); }
+    public static int detection(UUID id) {
+        return PER_GOLEM_DETECTION.getOrDefault(id, globalDetection);
+    }
 
     public static Integer individualCoal(UUID uuid) {
         return PER_GOLEM.get(uuid);
@@ -43,7 +50,9 @@ public final class ServerFurnaceSettings {
 
     public static void load(MinecraftServer server) {
         globalCoal = DEFAULT_COAL;
+        globalDetection = com.anantaya.smartcgolem.ai.FurnaceSearch.DEFAULT_RADIUS;
         PER_GOLEM.clear();
+        PER_GOLEM_DETECTION.clear();
         path = server.getWorldPath(LevelResource.ROOT).resolve(FILE);
         if (!Files.isRegularFile(path)) return;
         Properties data = new Properties();
@@ -54,6 +63,24 @@ public final class ServerFurnaceSettings {
                 if (validCoalTarget(saved)) globalCoal = saved;
             } catch (NumberFormatException ex) {
                 SmartCopperGolem.LOGGER.warn("Invalid default furnace fuel amount.");
+            }
+            try {
+                int savedDetection = Integer.parseInt(data.getProperty("detection.radius", "64"));
+                if (com.anantaya.smartcgolem.ai.FurnaceSearch.validRadius(savedDetection))
+                    globalDetection = savedDetection;
+            } catch (NumberFormatException ex) {
+                SmartCopperGolem.LOGGER.warn("Invalid Furnace Tender detection radius.");
+            }
+            for (String key : data.stringPropertyNames()) {
+                if (!key.startsWith("detection.golem.")) continue;
+                try {
+                    UUID id = UUID.fromString(key.substring("detection.golem.".length()));
+                    int radius = Integer.parseInt(data.getProperty(key));
+                    if (com.anantaya.smartcgolem.ai.FurnaceSearch.validRadius(radius))
+                        PER_GOLEM_DETECTION.put(id, radius);
+                } catch (IllegalArgumentException e) {
+                    SmartCopperGolem.LOGGER.warn("Invalid per-golem furnace detection radius: {}", key);
+                }
             }
             for (String key : data.stringPropertyNames()) {
                 if (!key.startsWith("golem.")) continue;
@@ -92,9 +119,33 @@ public final class ServerFurnaceSettings {
         }
     }
 
+    public static void setGlobalDetection(int radius) throws IOException {
+        if (!com.anantaya.smartcgolem.ai.FurnaceSearch.validRadius(radius))
+            throw new IllegalArgumentException("Use múltiplos de 8 entre 16 e 128 blocos.");
+        int old = globalDetection;
+        globalDetection = radius;
+        try { save(); } catch (IOException e) { globalDetection = old; throw e; }
+    }
+
+    public static void setIndividualDetection(UUID id, Integer radius) throws IOException {
+        if (radius != null && !com.anantaya.smartcgolem.ai.FurnaceSearch.validRadius(radius))
+            throw new IllegalArgumentException("Use múltiplos de 8 entre 16 e 128 blocos.");
+        Integer old = PER_GOLEM_DETECTION.get(id);
+        if (radius == null) PER_GOLEM_DETECTION.remove(id);
+        else PER_GOLEM_DETECTION.put(id, radius);
+        try { save(); }
+        catch (IOException e) {
+            if (old == null) PER_GOLEM_DETECTION.remove(id);
+            else PER_GOLEM_DETECTION.put(id, old);
+            throw e;
+        }
+    }
+
     public static void unload() {
         PER_GOLEM.clear();
+        PER_GOLEM_DETECTION.clear();
         globalCoal = DEFAULT_COAL;
+        globalDetection = com.anantaya.smartcgolem.ai.FurnaceSearch.DEFAULT_RADIUS;
         path = null;
     }
 
@@ -103,6 +154,9 @@ public final class ServerFurnaceSettings {
         Files.createDirectories(path.getParent());
         Properties data = new Properties();
         data.setProperty("coal.target", Integer.toString(globalCoal));
+        data.setProperty("detection.radius", Integer.toString(globalDetection));
+        PER_GOLEM_DETECTION.forEach((id, radius) ->
+                data.setProperty("detection.golem." + id, Integer.toString(radius)));
         PER_GOLEM.forEach((id, amount) ->
                 data.setProperty("golem." + id, Integer.toString(amount)));
         Path temp = path.resolveSibling(FILE + ".tmp");
