@@ -16,7 +16,8 @@ import java.util.Locale;
  */
 public enum GolemProfession {
     ORGANIZADOR,
-    COLETOR;
+    COLETOR,
+    AGRICULTOR;
 
     public static GolemProfession fromName(String customName) {
         if (customName == null || customName.isBlank()) return ORGANIZADOR;
@@ -28,6 +29,7 @@ public enum GolemProfession {
         String label = (colon >= 0 ? normalized.substring(0, colon) : normalized).trim();
         return switch (label) {
             case "coletor", "collector" -> COLETOR;
+            case "agricultor", "farmer" -> AGRICULTOR;
             default -> ORGANIZADOR;
         };
     }

@@ -17,7 +17,9 @@ public class GolemProfessionTest {
         assertEquals(GolemProfession.ORGANIZADOR, GolemProfession.fromName(null));
         assertEquals(GolemProfession.ORGANIZADOR, GolemProfession.fromName(""));
         assertEquals(GolemProfession.ORGANIZADOR, GolemProfession.fromName("João"));
-        assertEquals(GolemProfession.ORGANIZADOR, GolemProfession.fromName("Agricultor: Pedro"));
+        assertEquals(GolemProfession.AGRICULTOR, GolemProfession.fromName("Agricultor: Pedro"));
+        assertEquals(GolemProfession.AGRICULTOR, GolemProfession.fromName("Farmer: Ana"));
+        assertEquals(GolemProfession.AGRICULTOR, GolemProfession.fromName("Agricultor"));
         assertEquals(GolemProfession.ORGANIZADOR, GolemProfession.fromName("Fornalheiro"));
         assertEquals(GolemProfession.ORGANIZADOR, GolemProfession.fromName("Supercoletor: João"));
     }

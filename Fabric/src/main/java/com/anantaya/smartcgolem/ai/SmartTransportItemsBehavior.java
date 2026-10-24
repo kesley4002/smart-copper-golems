@@ -73,6 +73,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         IDLE,
         WALK_TO_SOURCE,
         WALK_TO_ITEM,
+        WALK_TO_CROP,
         WAIT_FOR_SOURCE,
         INTERACT_SOURCE,
         WALK_TO_DESTINATION,
@@ -337,6 +338,20 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 searchForTarget(level, mob, gameTime);
 
             case WALK_TO_ITEM -> collectGroundItem(level, mob, gameTime);
+
+            case WALK_TO_CROP -> {
+                if (!(mob instanceof CopperGolem golem) || !isFarmer(mob)
+                        || currentTarget == null || !mob.getMainHandItem().isEmpty()) {
+                    switchState(mob, TaskState.IDLE, null, gameTime);
+                } else if (mob.blockPosition().distSqr(currentTarget) <= 9) {
+                    if (FarmerHarvest.harvest(level, golem, currentTarget)) {
+                        golem.swing(InteractionHand.MAIN_HAND);
+                    }
+                    switchState(mob, TaskState.IDLE, null, gameTime);
+                } else {
+                    walkToTarget(mob, gameTime);
+                }
+            }
 
             case WALK_TO_SOURCE -> {
                 walkToTarget(mob, gameTime);
@@ -924,7 +939,14 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         // Only the Collector profession replaces chest pickup with ground
         // pickup. Unnamed golems and all other names keep original sorting.
-        if (!carrying && isCollector(mob)) {
+        if (!carrying && isFarmer(mob)) {
+            BlockPos crop = FarmerHarvest.findCrop(level, (CopperGolem) mob);
+            if (crop != null && mob.getNavigation().createPath(crop, 1) != null) {
+                switchState(mob, TaskState.WALK_TO_CROP, crop, gameTime);
+                return;
+            }
+        }
+        if (!carrying && (isCollector(mob) || isFarmer(mob))) {
             ItemEntity item = findGroundItem(level, mob);
             if (item != null) {
                 targetGroundItem = item;
@@ -954,6 +976,13 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             System.out.println("[SMART-GOLEM SOURCE] Selected source chest=" + best);
             switchState(mob, TaskState.WALK_TO_SOURCE, best, gameTime);
         }
+    }
+
+    private boolean isFarmer(PathfinderMob mob) {
+        if (!(mob instanceof CopperGolem golem)) return false;
+        return GolemProfession.fromName(
+                golem.getCustomName() == null ? null : golem.getCustomName().getString())
+                == GolemProfession.AGRICULTOR;
     }
 
     private boolean isCollector(PathfinderMob mob) {
