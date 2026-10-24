@@ -6,6 +6,12 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.player.UseEntityCallback;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import com.anantaya.smartcgolem.ai.ShepherdShears;
 import net.minecraft.world.entity.animal.golem.CopperGolem;
 import net.minecraft.commands.Commands;
 import com.anantaya.smartcgolem.util.StorageFrameIndex;
@@ -53,6 +59,40 @@ public class SmartCopperGolem implements ModInitializer {
         ServerEntityEvents.ENTITY_LOAD.register((entity, world) -> {
             if (entity instanceof CopperGolem golem) {
                 ServerWorkZoneSettings.anchor(golem);
+                // Saved virtual equipment must never become ordinary loot.
+                ShepherdShears.protectIfVirtual(golem);
+                if (GolemProfession.fromName(golem.getCustomName() == null
+                        ? null : golem.getCustomName().getString()) != GolemProfession.PASTOR)
+                    ShepherdShears.hideIfVirtual(golem);
+            } else if (entity instanceof ItemEntity item
+                    && ShepherdShears.isVirtual(item.getItem())) {
+                // Safety net for other mods or old worlds that dropped a copy.
+                item.discard();
+            }
+        });
+
+        // The virtual scissors must not be transferred by interacting with
+        // the copper golem. Consume the interaction before vanilla logic can
+        // exchange its hand item; briefly hide the scissors as visual feedback.
+        UseEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
+            if (entity instanceof CopperGolem golem
+                    && ShepherdShears.isVirtual(golem.getMainHandItem())) {
+                if (!world.isClientSide()) ShepherdShears.hideIfVirtual(golem);
+                return InteractionResult.SUCCESS;
+            }
+            return InteractionResult.PASS;
+        });
+
+        // Defensive cleanup for crossplay clients and other interaction mods:
+        // ONLY the exact private cosmetic marker is removed; real shears and
+        // other player inventory items are completely untouched.
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            for (var player : server.getPlayerList().getPlayers()) {
+                var inventory = player.getInventory();
+                for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+                    if (ShepherdShears.isVirtual(inventory.getItem(slot)))
+                        inventory.setItem(slot, ItemStack.EMPTY);
+                }
             }
         });
 
