@@ -9,7 +9,7 @@
 - Esse recipiente será **privativo do golem Roger**: outros golems ignoram o baú no recolhimento de itens, ao guardar, na compostagem, no fornecimento de carvão e na seleção dos baús. As verificações são refeitas antes de alterar o inventário, incluindo depósitos elevados por animação.
 - Outros baús e barris **sem nome personalizado** continuam comuns, podendo ser usados por todos os golems conforme filtros de moldura.
 - Quando Roger encontra tanto um baú pessoal quanto um compartilhado com o mesmo filtro, ele **prioriza o próprio**, mesmo que o compartilhado esteja mais perto. Caso o próprio esteja cheio ou fora de sua área de trabalho, usa outro válido, compartilhado, se houver.
-- Para reutilizar um baú por todos os golems, quebre-o, renomeie na bigorna para **Baú** (sem nome personalizado de dono) e reinstale, ou coloque um baú novo sem nome. Não confunda a exibição do título de baú vanilla com nome personalizado: somente o customName armazenado pelo bloco o torna privado.
+- Para deixar um baú público novamente, **substitua-o por um baú novo, nunca renomeado na bigorna**, ou remova efetivamente o nome personalizado do item antes de recolocá-lo. Apenas escrever **Baú** na bigorna pode continuar contando como nome personalizado; por segurança, não dependa disso. A proteção é ativada exclusivamente pelo `customName` salvo no bloco.
 - **Jogadores, funis, água e redstone não são bloqueados por este recurso.** É isolamento da **IA dos golems**, não uma proteção contra roubo de players/hoppers.
 
 ## Baú duplo
