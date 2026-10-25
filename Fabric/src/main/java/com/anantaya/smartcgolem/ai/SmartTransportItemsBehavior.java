@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableMap;
 import com.anantaya.smartcgolem.util.SearchVolume;
 import com.anantaya.smartcgolem.ServerWorkZoneSettings;
 import com.anantaya.smartcgolem.GolemProfession;
+import com.anantaya.smartcgolem.ai.GolemStorageOwnership;
 import com.anantaya.smartcgolem.ServerFarmerSettings;
 import com.anantaya.smartcgolem.ServerCollectorSettings;
 import com.anantaya.smartcgolem.ServerFurnaceSettings;
@@ -437,7 +438,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
                 BaseContainerBlockEntity chest = getSourceBlockEntity(level, currentTarget);
 
-                if (chest == null) {
+                if (chest == null || !mayUseStorage(level, mob, currentTarget)) {
                     switchState(mob, TaskState.IDLE, null, gameTime);
                     return;
                 }
@@ -476,7 +477,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
                 BaseContainerBlockEntity chest = getDestinationBlockEntity(level, currentTarget);
 
-                if (chest == null) {
+                if (chest == null || !mayUseStorage(level, mob, currentTarget)) {
                     switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);
                     return;
                 }
@@ -766,7 +767,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         BaseContainerBlockEntity chest = getSourceBlockEntity(level, currentTarget);
 
-        if (chest == null) {
+        if (chest == null || !mayUseStorage(level, mob, currentTarget)) {
             System.out.println("[SMART-GOLEM ERROR] Source target is not ChestBlockEntity at " + currentTarget);
             closeOpenedContainer();
             switchState(mob, TaskState.IDLE, null, gameTime);
@@ -871,7 +872,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         BaseContainerBlockEntity chest = getDestinationBlockEntity(level, currentTarget);
 
-        if (chest == null || ItemFrameHelper.hasSourceMarker(level, currentTarget)) {
+        if (chest == null || !mayUseStorage(level, mob, currentTarget)
+                || ItemFrameHelper.hasSourceMarker(level, currentTarget)) {
             System.out.println("[SMART-GOLEM ERROR] Destination target is not a supported chest/barrel at " + currentTarget);
             closeOpenedContainer();
             switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);
@@ -2173,6 +2175,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         }
 
         return remaining;
+    }
+
+    /** Recheck ownership for EVERY golem inventory entry point, not only discovery. */
+    private boolean mayUseStorage(ServerLevel level, PathfinderMob mob, BlockPos pos) {
+        return mob instanceof CopperGolem golem
+                && GolemStorageOwnership.canAccess(level, pos, golem);
     }
 
     private boolean isChestBusy(BaseContainerBlockEntity chest) {
