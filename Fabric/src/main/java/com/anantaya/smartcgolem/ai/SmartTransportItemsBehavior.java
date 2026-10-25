@@ -932,6 +932,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 System.out.println("[SMART-GOLEM DEPOSIT START] chest=" + currentTarget
                         + " held=" + heldBefore);
 
+                if (!mayUseStorage(level, mob, currentTarget)) {
+                    closeOpenedContainer();
+                    unlockChest();
+                    switchState(mob, TaskState.IDLE, null, gameTime);
+                    return;
+                }
                 Container targetContainer = getActualContainer(level, currentTarget, chest);
 
                 ItemStack remaining =
@@ -2054,7 +2060,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     }
 
     private boolean pickupFromChest(ServerLevel level, PathfinderMob mob, BaseContainerBlockEntity chest) {
-
+        // A player may have renamed a chest after the golem selected it.
+        if (!mayUseStorage(level, mob, currentTarget)) return false;
         Container contents = getActualContainer(level, currentTarget, chest);
         for (int i = 0; i < contents.getContainerSize(); i++) {
             ItemStack stack = contents.getItem(i);
@@ -2433,6 +2440,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         } else if (dx*dx + dz*dz > 9.0D) return false;
         // Validate frame and destination before commencing long animation.
         if (getDestinationBlockEntity(level, currentTarget) == null
+                || !mayUseStorage(level, mob, currentTarget)
                 || ItemFrameHelper.hasSourceMarker(level, currentTarget)) return false;
         FrameFilterResult filter = getFrameFilterResult(level, currentTarget, mob.getMainHandItem());
         if (!filter.hasFrame() || !filter.matchesHeld()) return false;
@@ -2470,8 +2478,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         BaseContainerBlockEntity chest = getDestinationBlockEntity(level, depositTarget);
 
-        if (chest == null || ItemFrameHelper.hasSourceMarker(level, depositTarget)) {
-            System.out.println("[SMART-GOLEM MAGIC-DEPOSIT-CANCEL] Target is not a supported chest/barrel: " + depositTarget);
+        if (chest == null || !mayUseStorage(level, mob, depositTarget)
+                || ItemFrameHelper.hasSourceMarker(level, depositTarget)) {
+            System.out.println("[SMART-GOLEM MAGIC-DEPOSIT-CANCEL] Target is not authorized or not a supported chest/barrel: " + depositTarget);
             markDestinationSelection(false, true);
             switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);
             return true;
@@ -2541,6 +2550,11 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         boolean deposited = false;
 
         try {
+            // Validate ownership once more under the container lock.
+            if (!mayUseStorage(level, mob, depositTarget)) {
+                unlockChest();
+                return false;
+            }
             remaining = insertIntoChest(level, depositTarget, targetContainer, heldBefore);
             deposited = remaining.getCount() < heldBefore.getCount();
             if (deposited) {
