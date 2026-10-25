@@ -1195,7 +1195,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     || !ServerWorkZoneSettings.contains(golem, level, p)) continue;
             if (ItemFrameHelper.hasSourceMarker(level, p)) continue;
             BaseContainerBlockEntity block = getDestinationBlockEntity(level, p);
-            if (block == null) continue;
+            if (block == null || !GolemStorageOwnership.canAccess(level, p, golem)) continue;
             Container container = getActualContainer(level, p, block);
             for (int slot = 0; slot < container.getContainerSize(); slot++) {
                 ItemStack stack = container.getItem(slot);
@@ -1215,7 +1215,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (!ServerWorkZoneSettings.contains(golem, level, p)
                     || ItemFrameHelper.hasSourceMarker(level, p)) continue;
             BaseContainerBlockEntity block = getDestinationBlockEntity(level, p);
-            if (block == null) continue;
+            if (block == null || !GolemStorageOwnership.canAccess(level, p, golem)) continue;
             ItemFrameHelper.FilterResult filter = ItemFrameHelper.filter(level, p, boneMeal);
             // Legacy hasSpaceFor returns FALSE when any inventory space exists.
             if (filter.hasFrame() && filter.matchesHeld()
@@ -1261,13 +1261,14 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             return;
         }
         BaseContainerBlockEntity chest = getDestinationBlockEntity(level, source);
-        if (chest == null || isChestBusy(chest)
-                || tryLockChest(level.dimension(), source, time)) return;
+        if (chest == null || !mayUseStorage(level, mob, source)
+                || isChestBusy(chest) || tryLockChest(level.dimension(), source, time)) return;
 
         try {
             // An item cannot leave its source if the category frame, stock
             // floor or selected slot has changed since the previous tick.
-            if (ItemFrameHelper.hasSourceMarker(level, source)) return;
+            if (ItemFrameHelper.hasSourceMarker(level, source)
+                    || !mayUseStorage(level, mob, source)) return;
             Container inv = getActualContainer(level, source, chest);
             if (input.slot() < 0 || input.slot() >= inv.getContainerSize()) return;
             ItemStack stored = inv.getItem(input.slot());
@@ -1464,7 +1465,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                             || ItemFrameHelper.hasSourceMarker(level, source)
                             || source.equals(pos)) continue;
                     BaseContainerBlockEntity block = getDestinationBlockEntity(level, source);
-                    if (block == null || isChestBusy(block)) continue;
+                    if (block == null || !GolemStorageOwnership.canAccess(level, source, golem)
+                            || isChestBusy(block)) continue;
                     FrameFilterResult filter = getFrameFilterResult(level, source, fuel);
                     if (!GolemRoutingRules.accepts(filter.hasFrame(),filter.matchesHeld(),false))
                         continue;
@@ -1525,10 +1527,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         }
 
         BaseContainerBlockEntity block = getDestinationBlockEntity(level,trip.supply());
-        if (block == null || isChestBusy(block)
+        if (block == null || !mayUseStorage(level, mob, trip.supply())
+                || isChestBusy(block)
                 || tryLockChest(level.dimension(),trip.supply(),time)) return;
         try {
-            if (ItemFrameHelper.hasSourceMarker(level,trip.supply())) return;
+            if (ItemFrameHelper.hasSourceMarker(level,trip.supply())
+                    || !mayUseStorage(level, mob, trip.supply())) return;
             FrameFilterResult filter = getFrameFilterResult(level,trip.supply(),trip.fuel());
             if (!GolemRoutingRules.accepts(filter.hasFrame(),filter.matchesHeld(),false)) return;
             Container inv = getActualContainer(level,trip.supply(),block);
@@ -1618,7 +1622,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (!ServerWorkZoneSettings.contains(golem, level, pos)
                     || ItemFrameHelper.hasSourceMarker(level, pos)) continue;
             BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
-            if (chest == null) continue;
+            if (chest == null || !GolemStorageOwnership.canAccess(level, pos, golem))
+                continue;
             FrameFilterResult filter = getFrameFilterResult(level, pos, sample);
             if (!GolemRoutingRules.accepts(filter.hasFrame(), filter.matchesHeld(), false)) continue;
             // Legacy hasSpaceFor returns TRUE if there is no room.
@@ -1781,7 +1786,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (!ServerWorkZoneSettings.contains(golem, level, pos)
                     || ItemFrameHelper.hasSourceMarker(level, pos)) continue;
             BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
-            if (chest == null) continue;
+            if (chest == null || !GolemStorageOwnership.canAccess(level, pos, golem))
+                continue;
             FrameFilterResult filter = getFrameFilterResult(level, pos, sample);
             if (!GolemRoutingRules.accepts(filter.hasFrame(), filter.matchesHeld(), false)) continue;
             if (hasSpaceFor(getActualContainer(level, pos, chest), sample)) continue;
@@ -1922,7 +1928,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     || Math.abs((long)pos.getY() - mob.blockPosition().getY()) > 64) continue;
 
             BaseContainerBlockEntity chest = getSourceBlockEntity(level, pos);
-            if (chest == null || !hasAnyItem(getActualContainer(level, pos, chest))) continue;
+            if (chest == null || !mayUseStorage(level, mob, pos)
+                    || !hasAnyItem(getActualContainer(level, pos, chest))) continue;
 
             // Only require an immediate path when close. For distant
             // marked inputs, the golem travels in navigation-sized hops.
@@ -1958,7 +1965,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     || Math.abs((long)pos.getY() - mob.blockPosition().getY()) > 64) continue;
             if (pos.equals(lastPickupChest) || ItemFrameHelper.hasSourceMarker(level, pos)) continue;
             BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
-            if (chest == null) continue;
+            if (chest == null || !mayUseStorage(level, mob, pos)) continue;
             FrameFilterResult filter = getFrameFilterResult(level, pos, held);
             if (!GolemRoutingRules.accepts(filter.hasFrame(), filter.matchesHeld(), false)) continue;
             Container actual = getActualContainer(level, pos, chest);
