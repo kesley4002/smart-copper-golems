@@ -1963,7 +1963,16 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 ? ServerWorkZoneSettings.anchor(c) : mob.blockPosition();
         java.util.List<BlockPos> candidates = new java.util.ArrayList<>(
                 StorageFrameIndex.destinations(level, held));
-        candidates.sort((a,b) -> Double.compare(getRoughDistance(mob,a), getRoughDistance(mob,b)));
+        // A named golem prefers its OWN private destination over a shared
+        // chest of the same item-frame category, even if the latter is closer.
+        candidates.sort((a,b) -> {
+            if (mob instanceof CopperGolem golem) {
+                boolean aPrivate = GolemStorageOwnership.isPrivateFor(level, a, golem);
+                boolean bPrivate = GolemStorageOwnership.isPrivateFor(level, b, golem);
+                if (aPrivate != bPrivate) return aPrivate ? -1 : 1;
+            }
+            return Double.compare(getRoughDistance(mob,a), getRoughDistance(mob,b));
+        });
         for (BlockPos pos : candidates) {
             if (!(mob instanceof CopperGolem golem
                     ? ServerWorkZoneSettings.contains(golem, level, pos)
