@@ -43,8 +43,23 @@ public final class GolemStorageOwnership {
             if (first == null) first = partner;
             else if (!namesCompatible(first, partner)) return false;
         }
-        return accepts(first, golem.getCustomName() == null
-                ? null : golem.getCustomName().getString());
+        if (!accepts(first, golem.getCustomName() == null
+                ? null : golem.getCustomName().getString())) return false;
+        if (first == null) return true; // no owner: public
+        // The label is a human-readable identity. Refuse access if two
+        // loaded Copper Golems match it; assigning by name must not grant
+        // both of them access to one private inventory.
+        int matchingGolems = 0;
+        for (ServerLevel dimension : level.getServer().getAllLevels()) {
+            for (net.minecraft.world.entity.Entity entity : dimension.getAllEntities()) {
+                if (!(entity instanceof CopperGolem candidate)
+                        || candidate.getCustomName() == null) continue;
+                if (accepts(first, candidate.getCustomName().getString())) {
+                    if (++matchingGolems > 1) return false;
+                }
+            }
+        }
+        return matchingGolems == 1;
     }
 
     public static boolean isPrivateFor(ServerLevel level, BlockPos pos, CopperGolem golem) {
