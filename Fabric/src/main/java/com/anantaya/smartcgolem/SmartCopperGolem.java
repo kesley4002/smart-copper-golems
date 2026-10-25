@@ -41,6 +41,7 @@ public class SmartCopperGolem implements ModInitializer {
             ServerFarmerSettings.load(server);
             ServerCollectorSettings.load(server);
             ServerFurnaceSettings.load(server);
+            ServerPrivateStorageSettings.load(server);
             StorageFrameIndex.clear();
         });
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
@@ -51,6 +52,7 @@ public class SmartCopperGolem implements ModInitializer {
             ServerFarmerSettings.unload();
             ServerCollectorSettings.unload();
             ServerFurnaceSettings.unload();
+            ServerPrivateStorageSettings.unload();
             StorageFrameIndex.clear();
         });
 

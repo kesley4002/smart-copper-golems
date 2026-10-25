@@ -45,7 +45,13 @@ public final class GolemStorageOwnership {
         }
         if (!accepts(first, golem.getCustomName() == null
                 ? null : golem.getCustomName().getString())) return false;
-        if (first == null) return true; // no owner: public
+        // A golem in private-only mode refuses all shared/unnamed containers.
+        // Named ownership and double-chest conflict checks still run first.
+        if (first == null) {
+            return com.anantaya.smartcgolem.ServerPrivateStorageSettings.allows(
+                    com.anantaya.smartcgolem.ServerPrivateStorageSettings.isPrivateOnly(golem.getUUID()),
+                    false);
+        }
         // The label is a human-readable identity. Refuse access if two
         // loaded Copper Golems match it; assigning by name must not grant
         // both of them access to one private inventory.

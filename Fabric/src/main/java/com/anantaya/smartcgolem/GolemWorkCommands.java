@@ -42,6 +42,24 @@ public final class GolemWorkCommands {
                                         .executes(ctx -> setNamed(ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "name"),
                                                 IntegerArgumentType.getInteger(ctx, "width")))))
+                        .then(Commands.literal("storage")
+                                .executes(ctx -> showStorage(ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "name")))
+                                .then(Commands.literal("private")
+                                        .executes(ctx -> setStorage(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "name"), true)))
+                                .then(Commands.literal("shared")
+                                        .executes(ctx -> setStorage(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "name"), false))))
+                        .then(Commands.literal("bau")
+                                .executes(ctx -> showStorage(ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "name")))
+                                .then(Commands.literal("exclusivo")
+                                        .executes(ctx -> setStorage(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "name"), true)))
+                                .then(Commands.literal("compartilhado")
+                                        .executes(ctx -> setStorage(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "name"), false))))
                         .then(Commands.literal("reset")
                                 .executes(ctx -> setNamed(ctx.getSource(),
                                         StringArgumentType.getString(ctx, "name"), null))));
@@ -71,7 +89,11 @@ public final class GolemWorkCommands {
             for (Entity entity : level.getAllEntities()) {
                 if (!(entity instanceof CopperGolem golem)
                         || golem.getCustomName() == null
-                        || !golem.getCustomName().getString().equals(name)) continue;
+                        || !(golem.getCustomName().getString().equalsIgnoreCase(name)
+                             || (golem.getCustomName().getString().contains(":")
+                                 && golem.getCustomName().getString()
+                                     .substring(golem.getCustomName().getString().indexOf(':') + 1)
+                                     .strip().equalsIgnoreCase(name)))) continue;
                 if (found != null) {
                     source.sendFailure(Component.literal(
                             "Existem dois ou mais golems carregados com esse nome. Use nomes únicos."));
@@ -85,6 +107,36 @@ public final class GolemWorkCommands {
                     "Golem não encontrado entre as entidades carregadas: " + name));
         }
         return found;
+    }
+
+    private static int showStorage(CommandSourceStack source, String name) {
+        CopperGolem golem = findNamed(source, name);
+        if (golem == null) return 0;
+        boolean only = ServerPrivateStorageSettings.isPrivateOnly(golem.getUUID());
+        source.sendSuccess(() -> Component.literal(
+                "Golem " + golem.getCustomName().getString() + ": "
+                + (only ? "SOMENTE baús/barris próprios (private-only)."
+                        : "Baús/barris próprios e compartilhados (shared).")
+                + " Molduras de itens continuam obrigatórias."), false);
+        return 1;
+    }
+
+    private static int setStorage(CommandSourceStack source, String name, boolean privateOnly) {
+        CopperGolem golem = findNamed(source, name);
+        if (golem == null) return 0;
+        try {
+            ServerPrivateStorageSettings.setPrivateOnly(golem.getUUID(), privateOnly);
+            source.sendSuccess(() -> Component.literal(
+                    "Golem " + golem.getCustomName().getString()
+                    + (privateOnly
+                            ? ": acessa APENAS seus próprios baús e barris nomeados."
+                            : ": volta a acessar baús/barris compartilhados e próprios.")
+                    + " Configuração salva por UUID."), true);
+            return 1;
+        } catch (IOException e) {
+            source.sendFailure(Component.literal("Falha ao salvar modo de baús: " + e.getMessage()));
+            return 0;
+        }
     }
 
     private static int showNamed(CommandSourceStack source, String name) {
