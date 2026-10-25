@@ -41,7 +41,7 @@ public final class GolemStorageOwnership {
             String partner = customName(second);
             // An explicitly named second half controls the same combined inventory.
             if (first == null) first = partner;
-            else if (partner != null && !sameName(first, partner)) return false;
+            else if (!namesCompatible(first, partner)) return false;
         }
         return accepts(first, golem.getCustomName() == null
                 ? null : golem.getCustomName().getString());
@@ -71,8 +71,10 @@ public final class GolemStorageOwnership {
                 .replaceAll("\\p{M}+", "").strip().toLowerCase(Locale.ROOT);
     }
 
-    private static boolean sameName(String first, String second) {
-        return normalize(first).equals(normalize(second));
+    /** Conflicting names on the halves must not expose a shared double chest. */
+    public static boolean namesCompatible(String first, String second) {
+        return first == null || first.isBlank() || second == null || second.isBlank()
+                || normalize(first).equals(normalize(second));
     }
 
     /**
