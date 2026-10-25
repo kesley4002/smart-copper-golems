@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableMap;
 import com.anantaya.smartcgolem.util.SearchVolume;
 import com.anantaya.smartcgolem.ServerWorkZoneSettings;
 import com.anantaya.smartcgolem.GolemProfession;
+import com.anantaya.smartcgolem.ai.GolemStorageOwnership;
 import com.anantaya.smartcgolem.ServerFarmerSettings;
 import com.anantaya.smartcgolem.ServerCollectorSettings;
 import com.anantaya.smartcgolem.ServerFurnaceSettings;
@@ -437,7 +438,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
                 BaseContainerBlockEntity chest = getSourceBlockEntity(level, currentTarget);
 
-                if (chest == null) {
+                if (chest == null || !mayUseStorage(level, mob, currentTarget)) {
                     switchState(mob, TaskState.IDLE, null, gameTime);
                     return;
                 }
@@ -476,7 +477,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
                 BaseContainerBlockEntity chest = getDestinationBlockEntity(level, currentTarget);
 
-                if (chest == null) {
+                if (chest == null || !mayUseStorage(level, mob, currentTarget)) {
                     switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);
                     return;
                 }
@@ -766,7 +767,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         BaseContainerBlockEntity chest = getSourceBlockEntity(level, currentTarget);
 
-        if (chest == null) {
+        if (chest == null || !mayUseStorage(level, mob, currentTarget)) {
             System.out.println("[SMART-GOLEM ERROR] Source target is not ChestBlockEntity at " + currentTarget);
             closeOpenedContainer();
             switchState(mob, TaskState.IDLE, null, gameTime);
@@ -871,7 +872,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         BaseContainerBlockEntity chest = getDestinationBlockEntity(level, currentTarget);
 
-        if (chest == null || ItemFrameHelper.hasSourceMarker(level, currentTarget)) {
+        if (chest == null || !mayUseStorage(level, mob, currentTarget)
+                || ItemFrameHelper.hasSourceMarker(level, currentTarget)) {
             System.out.println("[SMART-GOLEM ERROR] Destination target is not a supported chest/barrel at " + currentTarget);
             closeOpenedContainer();
             switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);
@@ -930,6 +932,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 System.out.println("[SMART-GOLEM DEPOSIT START] chest=" + currentTarget
                         + " held=" + heldBefore);
 
+                if (!mayUseStorage(level, mob, currentTarget)) {
+                    closeOpenedContainer();
+                    unlockChest();
+                    switchState(mob, TaskState.IDLE, null, gameTime);
+                    return;
+                }
                 Container targetContainer = getActualContainer(level, currentTarget, chest);
 
                 ItemStack remaining =
@@ -1193,7 +1201,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     || !ServerWorkZoneSettings.contains(golem, level, p)) continue;
             if (ItemFrameHelper.hasSourceMarker(level, p)) continue;
             BaseContainerBlockEntity block = getDestinationBlockEntity(level, p);
-            if (block == null) continue;
+            if (block == null || !GolemStorageOwnership.canAccess(level, p, golem)) continue;
             Container container = getActualContainer(level, p, block);
             for (int slot = 0; slot < container.getContainerSize(); slot++) {
                 ItemStack stack = container.getItem(slot);
@@ -1213,7 +1221,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (!ServerWorkZoneSettings.contains(golem, level, p)
                     || ItemFrameHelper.hasSourceMarker(level, p)) continue;
             BaseContainerBlockEntity block = getDestinationBlockEntity(level, p);
-            if (block == null) continue;
+            if (block == null || !GolemStorageOwnership.canAccess(level, p, golem)) continue;
             ItemFrameHelper.FilterResult filter = ItemFrameHelper.filter(level, p, boneMeal);
             // Legacy hasSpaceFor returns FALSE when any inventory space exists.
             if (filter.hasFrame() && filter.matchesHeld()
@@ -1259,13 +1267,14 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             return;
         }
         BaseContainerBlockEntity chest = getDestinationBlockEntity(level, source);
-        if (chest == null || isChestBusy(chest)
-                || tryLockChest(level.dimension(), source, time)) return;
+        if (chest == null || !mayUseStorage(level, mob, source)
+                || isChestBusy(chest) || tryLockChest(level.dimension(), source, time)) return;
 
         try {
             // An item cannot leave its source if the category frame, stock
             // floor or selected slot has changed since the previous tick.
-            if (ItemFrameHelper.hasSourceMarker(level, source)) return;
+            if (ItemFrameHelper.hasSourceMarker(level, source)
+                    || !mayUseStorage(level, mob, source)) return;
             Container inv = getActualContainer(level, source, chest);
             if (input.slot() < 0 || input.slot() >= inv.getContainerSize()) return;
             ItemStack stored = inv.getItem(input.slot());
@@ -1462,7 +1471,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                             || ItemFrameHelper.hasSourceMarker(level, source)
                             || source.equals(pos)) continue;
                     BaseContainerBlockEntity block = getDestinationBlockEntity(level, source);
-                    if (block == null || isChestBusy(block)) continue;
+                    if (block == null || !GolemStorageOwnership.canAccess(level, source, golem)
+                            || isChestBusy(block)) continue;
                     FrameFilterResult filter = getFrameFilterResult(level, source, fuel);
                     if (!GolemRoutingRules.accepts(filter.hasFrame(),filter.matchesHeld(),false))
                         continue;
@@ -1523,10 +1533,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         }
 
         BaseContainerBlockEntity block = getDestinationBlockEntity(level,trip.supply());
-        if (block == null || isChestBusy(block)
+        if (block == null || !mayUseStorage(level, mob, trip.supply())
+                || isChestBusy(block)
                 || tryLockChest(level.dimension(),trip.supply(),time)) return;
         try {
-            if (ItemFrameHelper.hasSourceMarker(level,trip.supply())) return;
+            if (ItemFrameHelper.hasSourceMarker(level,trip.supply())
+                    || !mayUseStorage(level, mob, trip.supply())) return;
             FrameFilterResult filter = getFrameFilterResult(level,trip.supply(),trip.fuel());
             if (!GolemRoutingRules.accepts(filter.hasFrame(),filter.matchesHeld(),false)) return;
             Container inv = getActualContainer(level,trip.supply(),block);
@@ -1616,7 +1628,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (!ServerWorkZoneSettings.contains(golem, level, pos)
                     || ItemFrameHelper.hasSourceMarker(level, pos)) continue;
             BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
-            if (chest == null) continue;
+            if (chest == null || !GolemStorageOwnership.canAccess(level, pos, golem))
+                continue;
             FrameFilterResult filter = getFrameFilterResult(level, pos, sample);
             if (!GolemRoutingRules.accepts(filter.hasFrame(), filter.matchesHeld(), false)) continue;
             // Legacy hasSpaceFor returns TRUE if there is no room.
@@ -1779,7 +1792,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
             if (!ServerWorkZoneSettings.contains(golem, level, pos)
                     || ItemFrameHelper.hasSourceMarker(level, pos)) continue;
             BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
-            if (chest == null) continue;
+            if (chest == null || !GolemStorageOwnership.canAccess(level, pos, golem))
+                continue;
             FrameFilterResult filter = getFrameFilterResult(level, pos, sample);
             if (!GolemRoutingRules.accepts(filter.hasFrame(), filter.matchesHeld(), false)) continue;
             if (hasSpaceFor(getActualContainer(level, pos, chest), sample)) continue;
@@ -1920,7 +1934,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     || Math.abs((long)pos.getY() - mob.blockPosition().getY()) > 64) continue;
 
             BaseContainerBlockEntity chest = getSourceBlockEntity(level, pos);
-            if (chest == null || !hasAnyItem(getActualContainer(level, pos, chest))) continue;
+            if (chest == null || !mayUseStorage(level, mob, pos)
+                    || !hasAnyItem(getActualContainer(level, pos, chest))) continue;
 
             // Only require an immediate path when close. For distant
             // marked inputs, the golem travels in navigation-sized hops.
@@ -1948,7 +1963,16 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                 ? ServerWorkZoneSettings.anchor(c) : mob.blockPosition();
         java.util.List<BlockPos> candidates = new java.util.ArrayList<>(
                 StorageFrameIndex.destinations(level, held));
-        candidates.sort((a,b) -> Double.compare(getRoughDistance(mob,a), getRoughDistance(mob,b)));
+        // A named golem prefers its OWN private destination over a shared
+        // chest of the same item-frame category, even if the latter is closer.
+        candidates.sort((a,b) -> {
+            if (mob instanceof CopperGolem golem) {
+                boolean aPrivate = GolemStorageOwnership.isPrivateFor(level, a, golem);
+                boolean bPrivate = GolemStorageOwnership.isPrivateFor(level, b, golem);
+                if (aPrivate != bPrivate) return aPrivate ? -1 : 1;
+            }
+            return Double.compare(getRoughDistance(mob,a), getRoughDistance(mob,b));
+        });
         for (BlockPos pos : candidates) {
             if (!(mob instanceof CopperGolem golem
                     ? ServerWorkZoneSettings.contains(golem, level, pos)
@@ -1956,7 +1980,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
                     || Math.abs((long)pos.getY() - mob.blockPosition().getY()) > 64) continue;
             if (pos.equals(lastPickupChest) || ItemFrameHelper.hasSourceMarker(level, pos)) continue;
             BaseContainerBlockEntity chest = getDestinationBlockEntity(level, pos);
-            if (chest == null) continue;
+            if (chest == null || !mayUseStorage(level, mob, pos)) continue;
             FrameFilterResult filter = getFrameFilterResult(level, pos, held);
             if (!GolemRoutingRules.accepts(filter.hasFrame(), filter.matchesHeld(), false)) continue;
             Container actual = getActualContainer(level, pos, chest);
@@ -2045,7 +2069,8 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
     }
 
     private boolean pickupFromChest(ServerLevel level, PathfinderMob mob, BaseContainerBlockEntity chest) {
-
+        // A player may have renamed a chest after the golem selected it.
+        if (!mayUseStorage(level, mob, currentTarget)) return false;
         Container contents = getActualContainer(level, currentTarget, chest);
         for (int i = 0; i < contents.getContainerSize(); i++) {
             ItemStack stack = contents.getItem(i);
@@ -2173,6 +2198,12 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         }
 
         return remaining;
+    }
+
+    /** Recheck ownership for EVERY golem inventory entry point, not only discovery. */
+    private boolean mayUseStorage(ServerLevel level, PathfinderMob mob, BlockPos pos) {
+        return mob instanceof CopperGolem golem
+                && GolemStorageOwnership.canAccess(level, pos, golem);
     }
 
     private boolean isChestBusy(BaseContainerBlockEntity chest) {
@@ -2418,6 +2449,7 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         } else if (dx*dx + dz*dz > 9.0D) return false;
         // Validate frame and destination before commencing long animation.
         if (getDestinationBlockEntity(level, currentTarget) == null
+                || !mayUseStorage(level, mob, currentTarget)
                 || ItemFrameHelper.hasSourceMarker(level, currentTarget)) return false;
         FrameFilterResult filter = getFrameFilterResult(level, currentTarget, mob.getMainHandItem());
         if (!filter.hasFrame() || !filter.matchesHeld()) return false;
@@ -2455,8 +2487,9 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
 
         BaseContainerBlockEntity chest = getDestinationBlockEntity(level, depositTarget);
 
-        if (chest == null || ItemFrameHelper.hasSourceMarker(level, depositTarget)) {
-            System.out.println("[SMART-GOLEM MAGIC-DEPOSIT-CANCEL] Target is not a supported chest/barrel: " + depositTarget);
+        if (chest == null || !mayUseStorage(level, mob, depositTarget)
+                || ItemFrameHelper.hasSourceMarker(level, depositTarget)) {
+            System.out.println("[SMART-GOLEM MAGIC-DEPOSIT-CANCEL] Target is not authorized or not a supported chest/barrel: " + depositTarget);
             markDestinationSelection(false, true);
             switchState(mob, TaskState.RETURN_TO_SOURCE, returnToSourceChest, gameTime);
             return true;
@@ -2526,6 +2559,11 @@ public class SmartTransportItemsBehavior extends Behavior<PathfinderMob> {
         boolean deposited = false;
 
         try {
+            // Validate ownership once more under the container lock.
+            if (!mayUseStorage(level, mob, depositTarget)) {
+                unlockChest();
+                return false;
+            }
             remaining = insertIntoChest(level, depositTarget, targetContainer, heldBefore);
             deposited = remaining.getCount() < heldBefore.getCount();
             if (deposited) {
